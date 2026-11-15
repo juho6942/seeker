@@ -1,0 +1,662 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Seeker Dispatcher Model</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column (max 860px) like a dispatch spec sheet; diagrams and tables break out to full column width and scroll on their own. */
+:root{
+  --bg:#f2f4f6; --surface:#ffffff; --ink:#17222d; --muted:#5a6875; --line:#d5dbe1;
+  --blue:#1c4f9c; --blue-soft:#e3ebf7; --signal:#b97f00; --signal-soft:#fdf3d0;
+  --good:#1f7a4d; --bad:#b23a2e;
+  --display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#10161c; --surface:#18212a; --ink:#e6ecf1; --muted:#94a3b1; --line:#2b3743;
+  --blue:#7fb0f5; --blue-soft:#1b2b40; --signal:#f2c230; --signal-soft:#3a3010;
+  --good:#5fc592; --bad:#f08a7c; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#10161c; --surface:#18212a; --ink:#e6ecf1; --muted:#94a3b1; --line:#2b3743;
+  --blue:#7fb0f5; --blue-soft:#1b2b40; --signal:#f2c230; --signal-soft:#3a3010;
+  --good:#5fc592; --bad:#f08a7c; color-scheme:dark }
+
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.6}
+.wrap{max-width:860px;margin:0 auto;padding-block:40px 80px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:56px}
+section{display:flex;flex-direction:column;gap:18px;min-width:0}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;line-height:1.1}
+h1{font-size:clamp(2.6rem,7vw,4rem);font-weight:700;letter-spacing:.01em}
+h2{font-size:2rem;font-weight:600;padding-top:14px;border-top:3px solid var(--ink)}
+h3{font-size:1.35rem;font-weight:600;margin-top:10px}
+p{margin:0;max-width:68ch}
+ul,ol{margin:0;padding-left:1.2em;max-width:68ch}
+li+li{margin-top:4px}
+code,.mono{font-family:var(--mono);font-size:.88em}
+code{background:var(--blue-soft);padding:1px 5px;border-radius:3px}
+.eyebrow{font-family:var(--mono);font-size:.78rem;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.lede{font-size:1.15rem}
+.muted{color:var(--muted)}
+.small{font-size:.86rem}
+a{color:var(--blue)}
+a:focus-visible,input:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+
+.toc{display:flex;flex-wrap:wrap;gap:6px 18px;font-family:var(--mono);font-size:.82rem;padding:0;list-style:none;max-width:none}
+.toc li{margin:0}
+
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:0;border-top:1px solid var(--line);border-left:1px solid var(--line)}
+.facts div{padding:12px 14px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--surface);min-width:0}
+.facts b{display:block;font-family:var(--display);font-size:1.9rem;font-weight:600;line-height:1.1;font-variant-numeric:tabular-nums}
+.facts span{font-size:.82rem;color:var(--muted)}
+
+.note{border-left:4px solid var(--signal);background:var(--signal-soft);padding:10px 14px;font-size:.93rem}
+.note p{max-width:none}
+.new{font-family:var(--mono);font-size:.7rem;letter-spacing:.06em;background:var(--signal-soft);color:var(--ink);border:1px solid var(--signal);padding:0 5px;border-radius:3px;white-space:nowrap;vertical-align:middle}
+
+.scroll{overflow-x:auto;min-width:0}
+.panel{background:var(--surface);border:1px solid var(--line);padding:16px;min-width:0}
+.eq{overflow-x:auto;overflow-y:hidden;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--blue);padding:12px 16px;min-width:0}
+.eq + .cap, .panel + .cap, .scroll + .cap{font-size:.86rem;color:var(--muted);margin-top:-10px}
+
+table{border-collapse:collapse;width:100%;font-size:.88rem;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:var(--mono);font-size:.74rem;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:500;white-space:nowrap}
+td.num,th.num{text-align:right;white-space:nowrap}
+td.k{font-family:var(--mono);white-space:nowrap}
+tr.chg td{background:var(--signal-soft)}
+tr.grp td{font-family:var(--display);font-size:1.1rem;font-weight:600;padding-top:16px;border-bottom:2px solid var(--ink)}
+
+/* decision trees */
+.tree,.tree ul{list-style:none;margin:0;padding:0;max-width:none}
+.tree ul{margin-left:14px;padding-left:18px;border-left:2px solid var(--line)}
+.tree li{margin:8px 0;position:relative}
+.tree ul>li::before{content:"";position:absolute;left:-18px;top:.85em;width:14px;border-top:2px solid var(--line)}
+.q{font-weight:600}
+.y,.n,.out{font-family:var(--mono);font-size:.74rem;padding:1px 6px;border-radius:3px;margin-right:6px;white-space:nowrap}
+.y{background:var(--blue-soft);color:var(--blue)}
+.n{background:var(--line);color:var(--ink)}
+.out{border:1px solid var(--ink);color:var(--ink)}
+.stop{color:var(--bad);font-weight:600}
+.go{color:var(--good);font-weight:600}
+
+/* svg diagram + charts */
+svg text{font-family:var(--body);fill:var(--ink)}
+svg .t-mono{font-family:var(--mono)}
+svg .t-muted{fill:var(--muted)}
+svg .box{fill:var(--surface);stroke:var(--ink);stroke-width:1.5}
+svg .box-fn{fill:var(--blue-soft);stroke:var(--blue);stroke-width:2}
+svg .box-soft{fill:var(--bg);stroke:var(--line);stroke-width:1.5}
+svg .arr{fill:none;stroke:var(--ink);stroke-width:1.6}
+svg .arr-d{fill:none;stroke:var(--muted);stroke-width:1.4;stroke-dasharray:5 4}
+svg .head{fill:var(--ink)}
+svg .axis{stroke:var(--line);stroke-width:1;fill:none}
+svg .grid{stroke:var(--line);stroke-width:1;stroke-dasharray:2 4;fill:none}
+svg .ln{fill:none;stroke:var(--blue);stroke-width:2.4;stroke-linejoin:round}
+svg .ln2{fill:none;stroke:var(--signal);stroke-width:2.4}
+svg .mark{stroke:var(--signal);stroke-width:1.6;stroke-dasharray:4 3;fill:none}
+svg .dot{fill:var(--signal);stroke:var(--surface);stroke-width:2}
+svg .band{fill:var(--blue-soft)}
+svg .band2{fill:var(--signal-soft)}
+svg .tick{font-size:11px;fill:var(--muted);font-family:var(--mono)}
+svg .lab{font-size:12px;fill:var(--muted)}
+
+.bars{display:grid;grid-template-columns:minmax(120px,210px) 1fr 54px;gap:5px 10px;align-items:center;font-size:.86rem}
+.bars .track{position:relative;height:14px;background:var(--bg);min-width:0}
+.bars .track i{position:absolute;top:0;bottom:0;display:block}
+.bars .track .zero{position:absolute;left:50%;top:-2px;bottom:-2px;border-left:1px solid var(--muted)}
+.bars .pos{background:var(--good)} .bars .neg{background:var(--bad)}
+.bars .v{font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums}
+.gain{display:grid;grid-template-columns:70px minmax(0,1.3fr) minmax(80px,1fr) 92px;gap:6px 10px;align-items:center;font-size:.86rem}
+.gain .track{height:14px;background:var(--bg);position:relative}
+.gain .track i{position:absolute;left:0;top:0;bottom:0;background:var(--blue);display:block}
+.gain .track i.flat{background:var(--muted)}
+.gain .v{font-family:var(--mono);text-align:right;white-space:nowrap}
+.gain b{font-family:var(--display);font-size:1.1rem;font-weight:600}
+
+.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px 20px}
+.controls label{display:flex;flex-direction:column;gap:2px;font-size:.84rem;color:var(--muted);min-width:0}
+.controls output{font-family:var(--mono);color:var(--ink)}
+.controls input{width:100%;accent-color:var(--blue)}
+.readout{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;font-size:.84rem;color:var(--muted)}
+.readout b{display:block;font-family:var(--display);font-size:1.5rem;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums;line-height:1.15}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px}
+.two>*{min-width:0}
+.map3{display:grid;grid-template-columns:1fr 1.25fr 1fr;border-top:1px solid var(--line);border-left:1px solid var(--line);background:var(--surface);font-size:.9rem}
+.map3>div{padding:10px 12px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);min-width:0}
+.map3 .hd{font-family:var(--mono);font-size:.74rem;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);background:var(--bg)}
+.map3 .to::before{content:"→ ";color:var(--blue);font-weight:600}
+.map3 b{font-weight:600}
+.money{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:baseline;font-family:var(--display);font-size:1.5rem;font-weight:600;font-variant-numeric:tabular-nums}
+.money small{display:block;font-family:var(--body);font-size:.8rem;font-weight:400;color:var(--muted)}
+.money .op{color:var(--muted)}
+ol.walk{display:flex;flex-direction:column;gap:8px;padding-left:1.4em}
+ol.walk li{margin:0}
+table.why td:first-child{font-weight:600;min-width:150px}
+table.why td{min-width:170px}
+table.why td.num{min-width:110px}
+@page{size:A4;margin:13mm 12mm}
+@media print{
+  :root{--bg:#f2f4f6}
+  body{background:#fff;font-size:9.5pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .bars{grid-template-columns:150px 1fr 48px}
+  h1{font-size:2.6rem}
+  .wrap{max-width:none;padding:0 3px;gap:26px}
+  .scroll,.eq{overflow:visible}
+  .scroll svg,#chLife{min-width:0!important}
+  .eq mjx-container{margin:0!important}
+  .eq mjx-container svg{max-width:100%;height:auto}
+  table.why td{min-width:0}
+  table.why td.num{white-space:normal;width:17%}
+  h2,h3{break-after:avoid}
+  .panel,.eq,.note,tr,.tree li,.facts,.map3,ol.walk li{break-inside:avoid}
+  .toc,.screen-only{display:none}
+  #why,#quote,#params{break-before:page}
+}
+@media (max-width:520px){ .gain{grid-template-columns:54px minmax(0,1fr) 84px} .gain .track{display:none} }
+</style>
+
+<div class="wrap">
+
+<header style="display:flex;flex-direction:column;gap:18px">
+  <div class="eyebrow">Bahn: Spread · level 8 · synced 15 Nov 2026, commit af950d3</div>
+  <h1>Seeker, the model that plays the final</h1>
+  <p class="lede">A car-transport dispatcher for one simulated week in Finland. It prices about 1,000 dealer requests against a hidden competitor, then pays freelance drivers to move every car it wins. Everything it does follows from one estimate: <strong>the fee at which a driver takes this car in time</strong>.</p>
+  <div class="facts">
+    <div><b>18,738</b><span>EUR mean weekly margin on 96 fresh server weeks</span></div>
+    <div><b>95.8%</b><span>mean on time on those weeks. The line to stay ranked is 90%</span></div>
+    <div><b>95 / 96</b><span>weeks ranked. The one that missed was at 89.2% on time</span></div>
+    <div><b>87,241</b><span>ranking round 15 Nov 08:18, 5 weeks, all ranked, on time 96.0 to 99.3%</span></div>
+  </div>
+  <div class="note screen-only"><p><strong>What the sync brought.</strong> One new commit from juuusooo (08:37): the <code>final_1115/</code> folder with a copy of the file the final process loaded. It is byte-identical to <code>kit-best/algo.ts</code> and <code>kit-final/algo.ts</code>, which this page describes. The repo holds no result of the final itself yet (no <code>final.json</code> or <code>score.json</code>), so this page describes the model, not how the final went.</p></div>
+  <ul class="toc">
+    <li><a href="#big">Big picture</a></li><li><a href="#overview">Full flow</a></li><li><a href="#why">Why each part exists</a></li><li><a href="#quote">Prices</a></li><li><a href="#explorer">Price explorer</a></li><li><a href="#booking">Booking model</a></li><li><a href="#fees">Driver fees</a></li><li><a href="#pairs">Two-car gigs</a></li><li><a href="#learn">Learning</a></li><li><a href="#engine">Engine</a></li><li><a href="#params">Parameters</a></li><li><a href="#limits">Limits</a></li>
+  </ul>
+</header>
+
+<section id="big">
+  <h2>The big picture</h2>
+  <p>We are a middleman. A dealer pays us a price to move a car, and we pay a freelance driver a fee to do it. The score is what is left over, and it only counts if at least 90% of the cars arrive on time.</p>
+  <div class="panel">
+    <div class="money">
+      <span>40k<small>revenue from dealers</small></span><span class="op">−</span>
+      <span>24k<small>driver fees</small></span><span class="op">−</span>
+      <span>0.8k<small>late refunds</small></span><span class="op">≈</span>
+      <span>15k<small>weekly margin</small></span>
+    </div>
+    <p class="small muted" style="margin-top:8px">Rough sizes from early practice weeks. Seeker's weeks average 18.7k. Driver fees are the largest lever: 0.1 × the typical fee across all gigs is about 2.5k a week.</p>
+  </div>
+  <p>The difficulty is that almost everything that decides the outcome is hidden. The model is easiest to understand as five estimates of hidden things, each feeding one decision.</p>
+  <div class="map3">
+    <div class="hd">Hidden from us</div><div class="hd">How the model estimates it</div><div class="hd">Decision it drives</div>
+    <div><b>The competitor's price</b> for this request. The dealer buys from whoever is cheaper.</div><div class="to">A table fitted on 22M past quotes, plus this week's level learned live from our own wins and losses (week, weekday, lane).</div><div class="to">The price we quote.</div>
+    <div><b>The fee a driver accepts</b>, and how long it takes one to book.</div><div class="to">The booking model: chance of a booking per hour, given the gig, the clock and the fee. A planner searches it for the cheapest schedule.</div><div class="to">Which delivery options we sell, and the opening fee and raises of every gig.</div>
+    <div><b>What an order really costs</b> once raises, drops, failed visits and refunds are counted.</div><div class="to">Trees fitted on 156k finished orders.</div><div class="to">The cost side of the price choice.</div>
+    <div><b>How scarce drivers are</b> right now, in this town, for this deadline day.</div><div class="to">Counts of our open orders per nearby driver and per deadline day, and a fixed cost per driver-hour.</div><div class="to">Higher prices where drivers run out, instead of declining.</div>
+    <div><b>Whether the competitor is down</b> around this pickup today.</div><div class="to">A probability over "no outage" and "outage around town c" for 30 towns, from today's answers.</div><div class="to">Pricing against the dearer backup supplier.</div>
+  </div>
+  <h3>One request, start to finish</h3>
+  <ol class="walk">
+    <li><strong>A dealer asks for a price.</strong> The request names the lane, the car, up to three deadline options and sometimes a free-text note.</li>
+    <li><strong>We work out what a driver would cost.</strong> For each option the planner finds the cheapest fee schedule and the chance that someone books in time. Options that are too risky are dropped, risky ones are sold dearer.</li>
+    <li><strong>We pick the price with the best expected profit.</strong> A higher price earns more per car but wins less often. The balance point depends on where the competitor sits this week, which the model has been learning from every earlier answer.</li>
+    <li><strong>The dealer answers.</strong> Won or lost is the only feedback we get, and it updates the competitor estimate either way.</li>
+    <li><strong>A won car goes to the driver board.</strong> If another open car of ours makes a sensible chain, both are offered to one driver. Otherwise it is posted alone, starting at a low fee that rises on a schedule.</li>
+    <li><strong>The fee climbs until a driver books.</strong> Slowly at first, faster as the last possible pickup time approaches, and back down once the car is late anyway.</li>
+    <li><strong>The car is delivered.</strong> On time builds the dealer's trust in us, which raises the price that dealer accepts next time. Late halves it and costs a refund.</li>
+  </ol>
+</section>
+
+<section id="overview">
+  <h2>The full flow</h2>
+  <p>Two loops share one set of offline-fitted tables. The top loop sells: a request comes in, <code>quote()</code> answers, the dealer's choice teaches <code>learn()</code> the competitor's price this week. The bottom loop delivers: a won car is posted to the driver board, alone or paired, with a fee schedule from <code>fees()</code>.</p>
+  <div class="scroll panel">
+  <svg viewBox="0 0 980 660" style="min-width:820px;width:100%;height:auto" role="img" aria-label="Full flow of the Seeker model with the steps inside each function">
+    <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head"/></marker></defs>
+    <text x="20" y="24" class="t-mono t-muted" font-size="11" letter-spacing="1">SELLING LOOP · about 1,000 requests a week, Mon 08:00 to Fri 18:00</text>
+
+    <rect class="box" x="20" y="40" width="150" height="92"/>
+    <text x="95" y="62" text-anchor="middle" font-size="14" font-weight="600">Price request</text>
+    <g font-size="11" class="t-muted" text-anchor="middle"><text x="95" y="82">lane A → B, the car</text><text x="95" y="98">up to 3 deadline options</text><text x="95" y="114">dealer's note</text></g>
+
+    <rect class="box" x="200" y="40" width="170" height="92"/>
+    <text x="285" y="62" text-anchor="middle" font-size="14" font-weight="600">Prepare</text>
+    <g font-size="11" class="t-muted" text-anchor="middle"><text x="285" y="82">typical fee ← lane table</text><text x="285" y="98">note → ready time,</text><text x="285" y="114">deadline, site hours</text></g>
+
+    <rect class="box-fn" x="400" y="40" width="230" height="152"/>
+    <text x="414" y="62" font-size="15" font-weight="600" class="t-mono">quote()</text>
+    <g font-size="11.5"><text x="414" y="84">1  drop options a driver won't book</text><text x="414" y="104">2  cost = realized-cost trees + plan</text><text x="414" y="124">3  win chance vs the competitor</text><text x="414" y="144">4  best markup, less capacity cost</text><text x="414" y="164">5  price per option, 10% profit gate</text></g>
+    <text x="414" y="182" font-size="10.5" class="t-muted">no option left → decline (10 × list)</text>
+
+    <rect class="box" x="660" y="40" width="140" height="92"/>
+    <text x="730" y="62" text-anchor="middle" font-size="14" font-weight="600">Dealer chooses</text>
+    <g font-size="11" class="t-muted" text-anchor="middle"><text x="730" y="82">us, or the competitor</text><text x="730" y="98">(a dearer backup if</text><text x="730" y="114">the competitor is down)</text></g>
+
+    <rect class="box" x="830" y="40" width="130" height="92"/>
+    <text x="895" y="62" text-anchor="middle" font-size="14" font-weight="600">Won / lost</text>
+    <g font-size="11" class="t-muted" text-anchor="middle"><text x="895" y="82">the only feedback;</text><text x="895" y="98">the competitor's price</text><text x="895" y="114">is never shown</text></g>
+
+    <path class="arr" d="M170,86 H198" marker-end="url(#ah)"/><path class="arr" d="M370,86 H398" marker-end="url(#ah)"/><path class="arr" d="M630,86 H658" marker-end="url(#ah)"/><path class="arr" d="M800,86 H828" marker-end="url(#ah)"/>
+
+    <rect class="box-fn" x="660" y="162" width="270" height="84"/>
+    <text x="674" y="184" font-size="15" font-weight="600" class="t-mono">learn()</text>
+    <g font-size="11.5"><text x="674" y="204">price filter: week, weekday, lane levels</text><text x="674" y="222">outage belief: none, or around 1 of 30 towns</text></g>
+    <text x="674" y="238" font-size="10.5" class="t-muted">← sends back: competitor level, outage share</text>
+    <path class="arr" d="M880,132 V160" marker-end="url(#ah)"/>
+    <path class="arr" d="M660,180 H632" marker-end="url(#ah)"/>
+
+    <rect class="box-soft" x="190" y="284" width="730" height="86"/>
+    <text x="204" y="302" class="t-mono t-muted" font-size="11" letter-spacing="1">FITTED OFFLINE ON PRACTICE WEEKS, LOOKED UP LIVE</text>
+    <g font-size="11.5" text-anchor="middle">
+      <rect class="box" x="204" y="310" width="134" height="50"/><text x="271" y="326" font-weight="600">Booking model</text><text x="271" y="340" class="t-muted" font-size="10">160 random-fee weeks</text><text x="271" y="353" class="t-muted" font-size="10">→ quote, fees, pair</text>
+      <rect class="box" x="346" y="310" width="134" height="50"/><text x="413" y="326" font-weight="600">Realized-cost trees</text><text x="413" y="340" class="t-muted" font-size="10">156k won orders</text><text x="413" y="353" class="t-muted" font-size="10">→ quote</text>
+      <rect class="box" x="488" y="310" width="134" height="50"/><text x="555" y="326" font-weight="600">Competitor price</text><text x="555" y="340" class="t-muted" font-size="10">22M quotes</text><text x="555" y="353" class="t-muted" font-size="10">→ quote, learn</text>
+      <rect class="box" x="630" y="310" width="134" height="50"/><text x="697" y="326" font-weight="600">Typical-fee table</text><text x="697" y="340" class="t-muted" font-size="10">899 lanes</text><text x="697" y="353" class="t-muted" font-size="10">→ prepare</text>
+      <rect class="box" x="772" y="310" width="134" height="50"/><text x="839" y="326" font-weight="600">Region map</text><text x="839" y="340" class="t-muted" font-size="10">towns within 80 km</text><text x="839" y="353" class="t-muted" font-size="10">→ learn</text>
+    </g>
+    <path class="arr-d" d="M470,284 V194" marker-end="url(#ah)"/>
+    <path class="arr-d" d="M505,370 V418" marker-end="url(#ah)"/>
+    <path class="arr-d" d="M730,370 V418" marker-end="url(#ah)"/>
+
+    <text x="830" y="408" text-anchor="end" class="t-mono t-muted" font-size="11" letter-spacing="1">DELIVERY LOOP · about 430 orders a week</text>
+    <path class="arr" d="M948,132 V418" marker-end="url(#ah)"/>
+    <text x="962" y="270" font-size="11" class="t-muted" transform="rotate(90 962 270)" text-anchor="middle">if won</text>
+
+    <rect class="box" x="850" y="420" width="110" height="92"/>
+    <text x="905" y="442" text-anchor="middle" font-size="14" font-weight="600">Order won</text>
+    <g font-size="11" class="t-muted" text-anchor="middle"><text x="905" y="462">price and deadline</text><text x="905" y="478">are now fixed;</text><text x="905" y="494">only fees remain</text></g>
+
+    <rect class="box-fn" x="640" y="420" width="180" height="112"/>
+    <text x="654" y="442" font-size="15" font-weight="600" class="t-mono">pair()</text>
+    <g font-size="11.5"><text x="654" y="464">open single within 40 km?</text><text x="654" y="482">6 h slack, drive ≤ 12 h</text><text x="654" y="500">→ one gig for two cars</text></g>
+    <text x="654" y="520" font-size="10.5" class="t-muted">unbooked after 3 h → split</text>
+
+    <rect class="box-fn" x="400" y="420" width="210" height="132"/>
+    <text x="414" y="442" font-size="15" font-weight="600" class="t-mono">fees()</text>
+    <g font-size="11.5"><text x="414" y="464">plan: opening fee + 4 hourly raises</text><text x="414" y="482">ramp to 1.45 in the last 10 h</text><text x="414" y="500">warning: 1.30, +0.15 per 30 min</text><text x="414" y="518">late: back to 0.83, +0.2 per 6 h</text></g>
+    <text x="414" y="540" font-size="10.5" class="t-muted">all × the gig's typical fee</text>
+
+    <rect class="box" x="200" y="420" width="170" height="92"/>
+    <text x="285" y="442" text-anchor="middle" font-size="14" font-weight="600">Driver board</text>
+    <g font-size="11" class="t-muted" text-anchor="middle"><text x="285" y="462">drivers view, book, drop</text><text x="285" y="478">about 200 a week</text><text x="285" y="494">carry our gigs</text></g>
+
+    <rect class="box" x="20" y="420" width="150" height="92"/>
+    <text x="95" y="442" text-anchor="middle" font-size="14" font-weight="600">Delivered</text>
+    <g font-size="11" class="t-muted" text-anchor="middle"><text x="95" y="462">on time: full price</text><text x="95" y="478">late: refund</text><text x="95" y="494">never: price lost</text></g>
+
+    <path class="arr" d="M850,466 H822" marker-end="url(#ah)"/><path class="arr" d="M640,466 H612" marker-end="url(#ah)"/><path class="arr" d="M400,466 H372" marker-end="url(#ah)"/><path class="arr" d="M200,466 H172" marker-end="url(#ah)"/>
+
+    <rect class="box-soft" x="200" y="588" width="410" height="56"/>
+    <text x="405" y="610" text-anchor="middle" font-size="12" font-weight="600">Engine reacts</text>
+    <text x="405" y="628" text-anchor="middle" font-size="11" class="t-muted">deadline warning, drop, expiry, failed visit, order change → reprice, split, repost</text>
+    <path class="arr" d="M285,512 V586" marker-end="url(#ah)"/><path class="arr" d="M505,588 V554" marker-end="url(#ah)"/>
+
+    <rect class="box" x="20" y="588" width="150" height="56"/>
+    <text x="95" y="610" text-anchor="middle" font-size="12" font-weight="600">Score</text>
+    <text x="95" y="628" text-anchor="middle" font-size="11" class="t-muted">margin, if ≥ 90% on time</text>
+    <path class="arr" d="M95,512 V586" marker-end="url(#ah)"/>
+
+    <path class="arr" d="M95,420 V134" marker-end="url(#ah)"/>
+    <text x="103" y="262" font-size="11" class="t-muted">dealer trust:</text><text x="103" y="277" font-size="11" class="t-muted">+1 on time,</text><text x="103" y="292" font-size="11" class="t-muted">halved if late</text>
+  </svg>
+  </div>
+  <p class="cap">Blue boxes are the four functions in <code>algo.ts</code> (416 lines, every decision), with their steps listed inside. Dashed lines are table lookups, and each table names the functions that read it. The engine (<code>core/engine.ts</code>) does the mechanics and calls the four. The sections from <a href="#quote">Prices</a> on give the formulas behind each box.</p>
+</section>
+
+<section id="why">
+  <h2>Why each part exists</h2>
+  <p>Nothing here was designed up front. Each part was added because a specific problem showed up in played weeks, and it stayed only if it earned margin on fresh server weeks with the same seeds. The last column is what the part was worth in EUR a week, tested with and without it.</p>
+  <div class="scroll"><table class="why">
+    <tr><th>Part</th><th>The problem it solved</th><th>What it does</th><th class="num">Worth</th></tr>
+    <tr class="grp"><td colspan="4">Knowing what a car costs</td></tr>
+    <tr><td>Denoised typical fee<br><span class="mono small muted">typMinN</span></td><td>The dealer's "typical fee" carries about 13% random noise per request. Drivers mostly ignore it, so paying by it overpays half the gigs and underpays the rest.</td><td>Replaces it with a per-lane average from 899 lanes.</td><td class="num">+200 to +400</td></tr>
+    <tr><td>Realized-cost trees<br><span class="mono small muted">costW</span></td><td>The planner's expected fee barely predicted what an order ended up costing (R² 0.06). Raises, drops, failed visits and refunds were invisible when pricing.</td><td>Trees predict the full final cost from what is known at quote time (R² 0.27). Cheap gigs turn out dearer per euro than the plan says.</td><td class="num">+644 ± 106</td></tr>
+    <tr><td>Hard options<br><span class="mono small muted">minBookChance, hardChance, hardPrice</span></td><td>Some deadline options are unlikely to find a driver in time. Refusing them all loses sales, selling them all breaks the 90% on-time line.</td><td>Three bands: refuse under 0.82, sell 20% dearer up to 0.95, normal above.</td><td class="num">not measured alone</td></tr>
+    <tr class="grp"><td colspan="4">Rationing drivers</td></tr>
+    <tr><td>Capacity cost and a lower floor<br><span class="mono small muted">capLam, capConst, markupMin</span></td><td>With a high price floor, 43% of quotes sat on it, so the floor was choosing our orders. Drivers, not demand, are the limit: about 200 carry everything.</td><td>A low floor of 1.28, and a charge of 4 EUR per driver-hour on each quote, so long drives must earn more to be worth a driver.</td><td class="num">+600 to +800</td></tr>
+    <tr><td>Full town, full day<br><span class="mono small muted">capPerDriver, dueCapPer, fullPrice</span></td><td>Orders piled up in one town or on one deadline day and went late together. Friday-due orders held 40% of all lates.</td><td>Past a load limit, prices rise 25% instead of declining. The few orders still won pay for the risk.</td><td class="num">keeps weeks ranked; day cap +190</td></tr>
+    <tr><td>Price by deadline day<br><span class="mono small muted">dueMon, dueFri</span></td><td>Friday is the tight day, and Monday deadlines have slack because no new requests arrive over the weekend.</td><td>Friday-due +8% of list, next-Monday-due −3%.</td><td class="num">+120 ± 63</td></tr>
+    <tr class="grp"><td colspan="4">Reading the competitor</td></tr>
+    <tr><td>Weekday price learning<br><span class="mono small muted">pS, pWeek, pDay</span></td><td>The competitor sits 26% to 54% above list, different every week, and swings 12% between weekdays. One fixed price curve is wrong most days.</td><td>A filter learns a week level and a level per weekday from every win and loss. The weekday prior has to be wide (SD 0.14 in log price) or the filter learns nothing.</td><td class="num">+419 ± 101</td></tr>
+    <tr><td>Lane level<br><span class="mono small muted">pLane</span></td><td>Inside a week the competitor is consistently dear or cheap on a given lane, and 64% of requests come on a lane already asked that week.</td><td>One more learned level per lane.</td><td class="num">+303 ± 83 (one of four sets negative)</td></tr>
+    <tr><td>Floor follows the level<br><span class="mono small muted">floorLvl</span></td><td>In a cheap week or on a price-war day the fixed floor priced us out for whole days.</td><td>The floor drops with the learned level, by at most 0.20.</td><td class="num">+222 ± 58</td></tr>
+    <tr><td>Outage belief<br><span class="mono small muted">outBayes, outageK, outage</span></td><td>In a live test final the competitor went down around Helsinki. Priced at the floor, we won 79% of 108 requests, far too cheap, and a simple yes/no flag also fired outside the region.</td><td>A probability per region, with the win chance mixed between competitor and backup. The backup factor is 1.2 because stored quotes show wins hold up to 1.2 × and collapse by 1.3 ×.</td><td class="num">+430 ± 144</td></tr>
+    <tr class="grp"><td colspan="4">Paying drivers</td></tr>
+    <tr><td>Planned schedule, not a flat fee<br><span class="mono small muted">openMin, openMax, raiseMax, steps, lateCost</span></td><td>Flat fees lost at every level tried: cheap ones miss drivers, dear ones overpay. Only 38% of gigs book at the opening fee.</td><td>Opens low and raises hourly, with the pair (open, raise) chosen per gig by expected cost.</td><td class="num">opening floor and late fee: +530 ± 116</td></tr>
+    <tr><td>Early ramp<br><span class="mono small muted">rampTop, rampWindowH</span></td><td>A gig still unbooked the evening before its pickup day is 12.6% late, a booked one 2.3%. Raising at the last minute is too late.</td><td>Climbs to 1.45 × over the last 10 hours, ending 3 hours before the last pickup. It stops at 1.45 because the booking model shows no gain past 1.4.</td><td class="num">not measured alone</td></tr>
+    <tr><td>Late fee<br><span class="mono small muted">lateFee</span></td><td>Once the last pickup time has passed the order is late whatever we pay, yet the fee kept climbing.</td><td>Drops back to 0.83 × and climbs slowly.</td><td class="num">part of the +530</td></tr>
+    <tr><td>Cheaper fees from Thursday<br><span class="mono small muted">feeLate</span></td><td>In a test final, gigs posted on Thursday and Friday booked at 0.99 × typical against 0.87 on Monday: we overpaid late in the week.</td><td>Planned fees × 0.95 from Thursday on.</td><td class="num">+168 ± 45</td></tr>
+    <tr><td>Booking shift<br><span class="mono small muted">bookShift, bookQuote</span></td><td>The booking model is slightly too pessimistic about how fast drivers book. Correcting it everywhere sold more orders and cost ranked weeks.</td><td>Corrects it in the fee schedules only, so fees open lower while sales stay the same.</td><td class="num">+320 ± 50</td></tr>
+    <tr class="grp"><td colspan="4">Details that prevent failures</td></tr>
+    <tr><td>Note reading<br><span class="mono small muted">noteHours, pairFlags, hoursMinLeftH</span></td><td>Orders whose note gave real opening hours were 14 to 19% late, with 27 visits to closed sites per 100.</td><td>Reads hours, ready times, plates and gearbox from the note and plans around them.</td><td class="num">+251 ± 94; failed visits 3.5 → 0.6 a week</td></tr>
+    <tr><td>Two-car gigs<br><span class="mono small muted">pairKm, pairSlackH, pairCap, pairTop, pairHoldH</span></td><td>Every single-car gig pays a driver's empty trips. But a third of the pairs that nobody booked went late.</td><td>Joins cars into a chain when the join is short and there is slack, and splits the pair after 3 hours unbooked.</td><td class="num">the 40 km and 3 h settings: +213 ± 70</td></tr>
+  </table></div>
+  <h3>Tried and left out</h3>
+  <ul>
+    <li><strong>Buying dealer trust</strong> with lower prices: loses money in every form tried.</li>
+    <li><strong>An LLM choosing each price:</strong> it picked the model's price in 99% of requests.</li>
+    <li><strong>Requoting</strong> just before the dealer decides: nothing measurable.</li>
+    <li><strong>Posting gigs late</strong> to save fees: loses 1,200 to 6,300 a week and breaks on time.</li>
+    <li><strong>Opening high and repricing down:</strong> the first viewers book at the high fee.</li>
+    <li><strong>Direct offers to drivers:</strong> 0.2 to 5% accepted.</li>
+    <li><strong>Declining long hauls or premium cars:</strong> they are profitable; declining loses 160 to 840 a week.</li>
+    <li><strong>Fees tilted by gig size</strong> (cheap gigs paid relatively more): costs about 1 point of on time for no margin.</li>
+    <li><strong>A model refitted on our own policy's weeks:</strong> better fit, 1,100 a week worse in play.</li>
+  </ul>
+</section>
+
+<section id="quote">
+  <h2>Prices: <span class="mono" style="font-size:.8em">quote()</span></h2>
+  <p>Each request offers up to three delivery options (same day, next day, within 3 days). The model decides which options to sell, picks <em>one</em> markup for the whole request, then adjusts each option's price.</p>
+
+  <h3>Step 1. Which options are sellable</h3>
+  <p>For every option the fee planner (see <a href="#fees">Driver fees</a>) returns the cheapest schedule, its expected cost, and the chance a driver books before the last pickup time. The last pickup time is the deadline minus the drive, moved by anything the dealer's note says (car ready later, deliver earlier, real site hours).</p>
+  <div class="panel">
+  <ul class="tree">
+    <li><span class="q">Does the last pickup time leave at least 3 h after the car is ready?</span>
+      <ul>
+        <li><span class="n">no</span><span class="stop">drop the option</span></li>
+        <li><span class="y">yes</span><span class="q">Is the last pickup time still ahead of now?</span>
+          <ul>
+            <li><span class="n">no</span><span class="stop">drop the option</span></li>
+            <li><span class="y">yes</span><span class="q">Chance a driver books in time (planner)?</span>
+              <ul>
+                <li><span class="out">&lt; 0.82</span><span class="stop">drop the option</span></li>
+                <li><span class="out">0.82 to 0.95</span><span class="go">sell as a hard option</span>, price × 1.20</li>
+                <li><span class="out">≥ 0.95</span><span class="go">sell at the normal price</span></li>
+              </ul>
+            </li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+    <li><span class="q">No option left?</span> <span class="stop">Decline.</span> At level 4 and up the engine sends a quote at 10 × list instead of staying silent: losing is free, silence costs goodwill.</li>
+  </ul>
+  </div>
+
+  <h3>Step 2. What the car will cost</h3>
+  <p>The planner's expected fee is a weak predictor of what an order really ends up costing (held-out R² 0.06). Gradient-boosted trees fitted on 156,312 won orders predict the realized cost from 38 quote-time inputs (R² 0.27): fees with raises, refunds, failed visits, undelivered cars. Seeker over-weights the trees.</p>
+  <div class="eq">\[ \text{cost}_o \;=\; (1-w)\cdot \text{planFee}_o \;+\; w\cdot \widehat{c}_{\text{trees}}(x_o)\cdot \text{typical} \qquad w = \texttt{costW} = 1.25 \]</div>
+  <p class="cap">With <span class="mono">w = 1.25</span> this is 1.25 × trees − 0.25 × plan: it pushes past the trees, away from the plan. <span class="mono">typical</span> is the lane-table typical fee, not the dealer's noisy number.</p>
+
+  <h3>Step 3. The chance to win at a price</h3>
+  <p>The competitor's price is never shown. The model keeps a running estimate of its log price for this request, \(\mu\), as a fixed part from the offline table plus this week's learned levels:</p>
+  <div class="eq">\[ \mu \;=\; \underbrace{c + \beta_1\ln(1+0.01\,\text{trust}) + \beta_2\tfrac{\text{drive}}{600} + \text{lane}_{ab} + \text{pick}_a + \text{del}_b + \text{hour}_h + \text{dealer}_d - 0.0098\,\text{lates}}_{g\ \text{(price.json; } c = 0.327 \Rightarrow 1.39\times\text{list on average)}} \;+\; \underbrace{x_{\text{week}} + x_{\text{weekday}} + x_{\text{lane}}}_{\text{learned this week}} \]</div>
+  <div class="eq">\[ P(\text{win}\mid m) \;=\; \sigma\!\left(\frac{\mu - \ln m}{s}\right), \qquad s=\sqrt{\,0.1^2 + 0.37\,v\,}, \qquad \sigma(z)=\frac{1}{1+e^{-z}} \]</div>
+  <p class="cap"><span class="mono">m</span> is our price as a multiple of list. <span class="mono">v</span> is the filter's own variance for this request, so early in the week (large doubt) the curve is flatter. With <span class="mono">s = 0.1</span>, a 1% higher price costs about 10% of the win odds.</p>
+  <p>Between 08:00 and 18:00 the model also carries a belief that the competitor is down around this pickup today (share \(q\)), where dealers buy from a backup about 1.2 × dearer. The win chance becomes a mixture:</p>
+  <div class="eq">\[ P(\text{win}\mid m) \;=\; (1-q)\,\sigma\!\left(\frac{\mu-\ln m}{s}\right) \;+\; q\,\sigma\!\left(\frac{\mu+\ln 1.2-\ln m}{s}\right) \]</div>
+
+  <h3>Step 4. One markup for the request</h3>
+  <div class="eq">\[ m^{*} \;=\; \underset{m\,\in\,[\,1.28+\Delta,\;2.00+\Delta\,],\ \text{step } 0.01}{\arg\max}\;\; P(\text{win}\mid m)\,\Big(m\cdot\overline{\text{list}} \;-\; \overline{\text{cost}} \;-\; \underbrace{4\,\text{EUR}\times(\text{drive hours}+1)}_{\text{capacity cost}}\Big) \]</div>
+  <p class="cap">Bars mean the average over the sellable options. The capacity cost is a shadow price on driver time: at level 8 drivers are the bottleneck, so a car that holds a driver longer must earn more. It is subtracted in the choice only, never paid.</p>
+  <p>The search window slides by \(\Delta\), the sum of these shifts (all in multiples of list):</p>
+  <div class="scroll"><table>
+    <tr><th>Condition</th><th class="num">Shift Δ</th><th>Why</th></tr>
+    <tr><td>Pickup town full: our undelivered orders from it ≥ 3 × drivers living within 30 km</td><td class="num">+0.25</td><td>Ration drivers by price instead of declining</td></tr>
+    <tr><td>Round trip: an open one-car gig of ours delivers within 40 km of this pickup and starts within 40 km of this delivery</td><td class="num">−0.05</td><td>The driver needs no trip home</td></tr>
+    <tr><td>Outage belief at this pickup (share <span class="mono">q</span>)</td><td class="num">+0.30 × q</td><td>The dealer's other choice is the dearer backup</td></tr>
+    <tr><td>Cheap week or cheap day: learned level <span class="mono">x_week + x_weekday</span> below 0</td><td class="num">level, at most −0.20</td><td>A fixed floor would lose whole days in a price war</td></tr>
+  </table></div>
+
+  <h3>Step 5. The price of each option</h3>
+  <div class="eq">\[ \text{price}_o \;=\; \text{list}_o \times \big(m^{*} + d_o\big) \times \begin{cases}1.25 &amp; \text{deadline day full}\\ 1 &amp; \text{otherwise}\end{cases} \times \begin{cases}1.20 &amp; \text{hard option}\\ 1 &amp; \text{otherwise}\end{cases} \]</div>
+  <div class="eq">\[ d_o = \begin{cases} -0.03 &amp; \text{due next Monday or later}\\ +0.08 &amp; \text{due Friday}\\ 0 &amp; \text{otherwise}\end{cases} \qquad\quad \text{quote option } o \iff \text{price}_o \ge 1.10\times\text{cost}_o \]</div>
+  <p class="cap">A deadline day (Mon to Fri) is full when our orders due that day reach 0.10 × the week's driver roster. Friday holds 40% of the lates, Monday deadlines have slack. If no option clears the 10% profit gate, the request is declined.</p>
+</section>
+
+<section id="explorer">
+  <h2>Price explorer</h2>
+  <p>The step 4 search on one request, with no shifts and a settled filter (<span class="mono">s = 0.1</span>). <span class="screen-only">Move the inputs to see how the best markup trades the win chance against the margin.</span> Numbers are examples, not a recorded request.</p>
+  <div class="panel" style="display:flex;flex-direction:column;gap:16px">
+    <div class="controls">
+      <label for="xK">Competitor price, × list <output id="oK"></output><input id="xK" type="range" min="1.20" max="1.60" step="0.01" value="1.39"></label>
+      <label for="xL">List price, EUR <output id="oL"></output><input id="xL" type="range" min="50" max="300" step="5" value="120"></label>
+      <label for="xC">Expected cost, × list <output id="oC"></output><input id="xC" type="range" min="0.40" max="1.30" step="0.01" value="0.75"></label>
+      <label for="xH">Drive, hours <output id="oH"></output><input id="xH" type="range" min="0.5" max="8" step="0.5" value="2"></label>
+    </div>
+    <div class="two">
+      <div><div class="eyebrow">Chance to win</div><div id="chWin"></div></div>
+      <div><div class="eyebrow">Expected value of the quote, EUR</div><div id="chVal"></div></div>
+    </div>
+    <div class="readout" id="readout"></div>
+  </div>
+</section>
+
+<section id="booking">
+  <h2>The booking model</h2>
+  <p>A logistic model answers one question: what is the chance that a driver books this gig within the next hour, at this fee? It was fitted on 160 weeks played with random fees, and both <code>quote()</code> and <code>fees()</code> build on it.</p>
+  <div class="eq">\[ p_{\text{book}}(t, r) \;=\; \sigma\Big( -9.33 \;+\; \underbrace{\textstyle\sum_j \beta_j\,x_j(t)}_{\text{gig and clock}} \;+\; \underbrace{5.20\,r \;-\; 3.25\,\max(0,\,r-1) \;-\; 2.91\,\max(0,\,r-1.4)}_{\text{fee } r \text{ as a multiple of the typical fee}} \Big) \]</div>
+  <div class="two">
+    <div class="panel"><div class="eyebrow">Fee term of the logit, by fee multiple r</div><div id="chFee"></div>
+      <p class="small muted">Slope 5.2 up to the typical fee, 1.95 from 1.0 to 1.4, then −0.97: in the model, paying above 1.4 × typical buys no extra bookings. This is why the early ramp stops at 1.45.</p></div>
+    <div class="panel"><div class="eyebrow">Other weights (logit units)</div><div class="bars" id="bars"></div></div>
+  </div>
+  <p class="cap">Reading the bars: a gig is easier to book in the morning, as a two-car gig, and when its typical fee is large. It is harder at a private pickup address, late in the evening, on Sunday, for premium cars (experienced drivers only), with long drives, and the longer it has already sat on the board.</p>
+</section>
+
+<section id="fees">
+  <h2>Driver fees: <span class="mono" style="font-size:.8em">fees()</span></h2>
+  <h3>The planner</h3>
+  <p>For a gig posted now with \(H\) hours to its last pickup time (at most 72), the planner tries every opening fee from 0.706 to 1.6 in steps of 0.05 and every hourly raise in {0, 0.05, 0.1, 0.2}, and walks the hours:</p>
+  <div class="eq">\[ r_k = \text{open} + \text{raise}\cdot\min(k,\,4), \qquad p_k = \sigma\big(z_k + b + f(r_k)\big), \qquad U_0 = 1,\;\; U_{k+1} = U_k\,(1-p_k) \]</div>
+  <div class="eq">\[ \text{expected cost} \;=\; \sum_{k=0}^{H-1} U_k\,p_k\,r_k \;+\; U_H \times 4 \qquad\quad \text{chance booked in time} \;=\; 1-U_H \]</div>
+  <p class="cap">\(z_k\) is the gig-and-clock part of the logit in hour \(k\), \(f\) the fee term above, and 4 × typical is what a gig without a driver is counted as (<span class="mono">lateCost</span>). The cheapest (open, raise) pair wins. Raises stop after 4 steps.</p>
+  <div class="note"><p><strong>The booking shift.</strong> \(b\) = <span class="mono">bookShift</span> = 0.2 is added to the logit, but only when planning fee schedules. In <code>quote()</code> the planner runs with \(b = 0\). The booking model is a little too pessimistic about how fast drivers book, so the schedules can open lower, while which options are sold and at what price stays the same. Alone this was worth about +300 a week with orders unchanged.</p></div>
+
+  <h3>The life of a fee schedule</h3>
+  <div class="panel"><div class="eyebrow">Example: gig posted 30 h before its last pickup time, plan = open 0.81, raise 0.05</div><div class="scroll"><div id="chLife" style="min-width:620px"></div></div></div>
+  <p class="cap">Fee as a multiple of the typical fee, while nobody has booked. The opening fee and raise in this example are illustrative; the other levels are the model's parameters. The warning schedule restarts at 1.30, which is under the ramp's top of 1.45.</p>
+  <div class="panel">
+  <ul class="tree">
+    <li><span class="q">Has a deadline warning come for this order?</span> <span class="small muted">(from the world 3 h before the last pickup time, or from the engine's own timer 3 h before the last pickup the note allows)</span>
+      <ul>
+        <li><span class="n">no</span><strong>Normal schedule</strong>
+          <ul>
+            <li>Planned opening fee, then up to 4 hourly raises</li>
+            <li>If still open: hourly ramp to 1.45 × typical, starting 10 h before the last pickup time (or 1 h after the last raise) and ending 3 h before it</li>
+            <li>Posted Thursday or later: every fee × 0.95. Monday to Wednesday: × 1</li>
+          </ul>
+        </li>
+        <li><span class="y">yes</span><span class="q">Has the last pickup time passed?</span>
+          <ul>
+            <li><span class="n">no</span><strong>Steep schedule:</strong> 1.30, then +0.15 every 30 minutes, 4 times (to 1.90). A pair is split first.</li>
+            <li><span class="y">yes</span><strong>Late anyway:</strong> back down to 0.832, then +0.2 every 6 hours (to 1.63). Paying more no longer buys an on-time delivery.</li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+  </ul>
+  </div>
+</section>
+
+<section id="pairs">
+  <h2>Two cars, one driver: <span class="mono" style="font-size:.8em">pair()</span></h2>
+  <p>A driver who takes two cars in a chain pays one trip to the first pickup and one trip home, and the booking model gives two-car gigs a large bonus (+1.13 in the logit). When a one-car order is won, the engine checks every open, unbooked one-car gig of ours in both orders (new car first, new car second).</p>
+  <div class="panel">
+  <ul class="tree">
+    <li><span class="q">Can the new order be paired at all?</span>
+      <ul>
+        <li><span class="n">no</span>if its note says no plates or manual gearbox, moves the pickup or deadline, or names real site hours. <span class="stop">Post alone.</span></li>
+        <li><span class="y">yes</span><span class="q">For each candidate chain: total drive ≤ 12 h and no car past its last pickup time?</span> <span class="small muted">(partner must not be urgent or previously split)</span>
+          <ul>
+            <li><span class="y">yes</span><span class="q">First delivery within 40 km of the second pickup?</span>
+              <ul>
+                <li><span class="y">yes</span><span class="q">At least 6 h of slack before the tighter last pickup time?</span>
+                  <ul>
+                    <li><span class="y">yes</span><span class="go">Candidate.</span> Score = −join km − 0.5 × km from the last delivery back to the first pickup. Best score wins.</li>
+                  </ul>
+                </li>
+              </ul>
+            </li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+    <li><strong>If a pair is chosen:</strong> withdraw the partner's gig, post one two-car gig. Its schedule comes from the same planner with the opening fee capped at 0.9 × the sum of both typical fees, then ramps to at most 1.3.</li>
+    <li><strong>Exit:</strong> unbooked after 3 h, dropped by its driver, or a deadline warning: the pair is split, each car gets its own gig and is never paired again.</li>
+  </ul>
+  </div>
+</section>
+
+<section id="learn">
+  <h2>Learning during the week: <span class="mono" style="font-size:.8em">learn()</span></h2>
+  <h3>The price filter</h3>
+  <p>The competitor sits 26% to 54% above list, at a different level every week, with a weekday swing and a level per lane inside the week. The state \(x\) holds one number for the week, five for the weekdays and one per lane (pickup × delivery town, single cars, created when first asked). Every won or lost quote is one logistic observation; the update is a one-step Kalman-style correction.</p>
+  <div class="eq">\[ \hat p = \sigma\!\left(\frac{g + h^{\top}x - \ln m}{0.1}\right), \qquad w=\hat p\,(1-\hat p), \qquad a = \frac{P\,h}{0.1}, \qquad k = \frac{w}{1 + w\,h^{\top}a/0.1} \]</div>
+  <div class="eq">\[ P \;\leftarrow\; P - k\,a\,a^{\top}, \qquad\quad x \;\leftarrow\; x + \frac{P\,h}{0.1}\,\big(\text{won} - \hat p\big) \]</div>
+  <p class="cap">\(h\) marks which levels this request touches. \(P\) starts diagonal with prior SDs in log price: week 0.05, weekday 0.14, lane 0.06. Winning more than expected raises the levels, and the next quotes go out dearer. Dealer and town levels exist in the code but have prior 0 (tested, no gain).</p>
+
+  <h3>The outage belief</h3>
+  <p>Once a week the competitor is down in one region (a town and everything within 80 km) for a working day. The model holds a probability over 31 hypotheses: no outage today, or an outage around each of the 30 towns.</p>
+  <div class="eq">\[ \text{prior}(\text{outage today}) = \min\!\Big(0.6,\ \frac{1}{5-\text{day}}\Big)\ \text{if not seen yet this week, split over towns by}\ \ 1 + \#\{\text{our requests near town } c\} \]</div>
+  <div class="eq">\[ \text{post}(c) \;\propto\; \text{prior}(c)\prod_{\text{today's answers } i} \begin{cases} \ell_i(\mu_i + \ln 1.2) &amp; \text{pickup}_i \text{ within 80 km of } c\\ \ell_i(\mu_i) &amp; \text{otherwise}\end{cases} \qquad q(\text{place}) = \sum_{c\,:\,\text{place near } c}\text{post}(c) \]</div>
+  <p class="cap">\(\ell_i\) is the chance of the answer we actually got (won or lost) at the price we quoted, clipped to 0.08 to 0.92 so one answer cannot decide it. \(q\) feeds the mixture in step 3 and the +0.30 × q shift in step 4. The price filter reads each answer against the expected price there, so an outage does not drag the whole weekday level up. Once the belief passes 0.9 on a day, the outage counts as seen and its prior is 0 for the rest of the week.</p>
+</section>
+
+<section id="engine">
+  <h2>What the engine does around the four functions</h2>
+  <div class="scroll"><table>
+    <tr><th>Event</th><th>Reaction</th></tr>
+    <tr><td class="k">price_request</td><td><strong>Denoise the typical fee.</strong> The dealer's typical fee carries about 13% noise that drivers mostly ignore. It is replaced by a lane-table prediction (899 lanes, with small terms for private addresses, premium, electric), unless the lane was seen fewer than 5 times. Then <code>quote()</code>.</td></tr>
+    <tr><td class="k">order_won</td><td>Read the note. A note that moves the pickup or deadline, or names site hours, makes the car go alone and sets the engine's own warning timer. Otherwise try a pair, else post alone. Premium cars go to experienced drivers only; a note about plates or manual gearbox sets the audience up front.</td></tr>
+    <tr><td class="k">deadline_close</td><td>Mark the order urgent, split its pair if any, reprice with the steep schedule. One minute after the last pickup time, reprice again with the late schedule.</td></tr>
+    <tr><td class="k">gig_dropped / no_show</td><td>A pair is split. A single gig stays as posted.</td></tr>
+    <tr><td class="k">gig_expired</td><td>Repost: with the next day's slot when the note gives site hours, else without stop windows. An expired pair is split.</td></tr>
+    <tr><td class="k">visit_failed</td><td>Repost that car: later pickup if the car was not ready or the site was closed, manual-licence audience or transfer plates if that was the reason.</td></tr>
+    <tr><td class="k">order_changed</td><td>Withdraw the gig and post again with a fresh schedule.</td></tr>
+    <tr><td class="k">delivered</td><td>Dealer trust +1 if on time (up to 25), halved if late. Trust raises the price that dealer accepts.</td></tr>
+  </table></div>
+  <p class="cap">The note reader is a regex reader in Finnish, Swedish and English, 97 to 99% right on ready time, deadline, plates and manual gearbox. 42.5% of won orders carry a note, and 70% of notes change nothing.</p>
+</section>
+
+<section id="params">
+  <h2>Parameters</h2>
+  <p>The values Seeker plays. Parameters that are switched off (fee tilt, price-war state, typical-fee floor) are left out.</p>
+  <div class="scroll"><table>
+    <tr><th>Name</th><th class="num">Value</th><th>Meaning</th></tr>
+    <tr class="grp"><td colspan="3">Which options to sell</td></tr>
+    <tr><td class="k">minBookChance</td><td class="num">0.95</td><td>Normal price only above this chance of a booking in time</td></tr>
+    <tr><td class="k">hardChance</td><td class="num">0.82</td><td>Below this the option is not sold</td></tr>
+    <tr><td class="k">hardPrice</td><td class="num">0.20</td><td>Price rise for a hard option</td></tr>
+    <tr><td class="k">costW</td><td class="num">1.25</td><td>Weight of the realized-cost trees against the plan fee</td></tr>
+    <tr><td class="k">minProfit</td><td class="num">0.10</td><td>Price must be at least 1.10 × cost</td></tr>
+    <tr><td class="k">minSlackH</td><td class="num">3</td><td>Hours the deadline must leave beyond the drive</td></tr>
+    <tr><td class="k">capPerDriver</td><td class="num">3</td><td>Town is full at this many open orders per nearby driver</td></tr>
+    <tr><td class="k">dueCapPer</td><td class="num">0.10</td><td>Deadline day is full at this × roster</td></tr>
+    <tr><td class="k">fullPrice</td><td class="num">0.25</td><td>Price rise for a full town or day</td></tr>
+    <tr class="grp"><td colspan="3">Price search</td></tr>
+    <tr><td class="k">markupMin / markupMax</td><td class="num">1.28 / 2.00</td><td>Search range, × list</td></tr>
+    <tr><td class="k">capLam, capConst</td><td class="num">4, 1</td><td>Capacity cost: EUR per driver-hour, extra hours per gig</td></tr>
+    <tr><td class="k">pairBack</td><td class="num">0.05</td><td>Round-trip price cut</td></tr>
+    <tr><td class="k">dueMon / dueFri</td><td class="num">−0.03 / +0.08</td><td>Price shift by deadline day</td></tr>
+    <tr><td class="k">floorLvl</td><td class="num">1</td><td>Floor follows the learned level when it is below average</td></tr>
+    <tr><td class="k">outage, outageK</td><td class="num">0.30, 1.2</td><td>Floor shift in an outage; backup price × competitor</td></tr>
+    <tr><td class="k">outPriorMax</td><td class="num">0.6</td><td>Largest prior for an outage today</td></tr>
+    <tr class="grp"><td colspan="3">Price filter</td></tr>
+    <tr><td class="k">pS</td><td class="num">0.10</td><td>Sharpness of the dealer's choice, log price</td></tr>
+    <tr><td class="k">pWeek / pDay / pLane</td><td class="num">0.05 / 0.14 / 0.06</td><td>Prior SD of the week, weekday and lane levels</td></tr>
+    <tr class="grp"><td colspan="3">Driver fees (× typical fee)</td></tr>
+    <tr><td class="k">openMin / openMax</td><td class="num">0.706 / 1.6</td><td>Range of the opening fee</td></tr>
+    <tr><td class="k">raiseMax</td><td class="num">0.2</td><td>Largest hourly raise</td></tr>
+    <tr><td class="k">steps</td><td class="num">4</td><td>Number of hourly raises</td></tr>
+    <tr><td class="k">rampTop</td><td class="num">1.45</td><td>Top of the early ramp</td></tr>
+    <tr><td class="k">rampWindowH</td><td class="num">10</td><td>Ramp starts this many hours before the last pickup time</td></tr>
+    <tr><td class="k">steepOpen / steepStep</td><td class="num">1.3 / 0.15</td><td>After a deadline warning</td></tr>
+    <tr><td class="k">lateFee</td><td class="num">0.832</td><td>After the last pickup time has passed</td></tr>
+    <tr><td class="k">lateCost</td><td class="num">4</td><td>Planner's cost of a gig with no driver</td></tr>
+    <tr><td class="k">feeLate</td><td class="num">0.95</td><td>Fee factor for gigs posted from Thursday on</td></tr>
+    <tr><td class="k">bookShift</td><td class="num">0.2</td><td>Booking logit shift, fee schedules only</td></tr>
+    <tr class="grp"><td colspan="3">Two-car gigs</td></tr>
+    <tr><td class="k">pairKm</td><td class="num">40</td><td>Largest join distance, km</td></tr>
+    <tr><td class="k">pairSlackH</td><td class="num">6</td><td>Slack needed before the tighter last pickup time</td></tr>
+    <tr><td class="k">pairCap / pairTop</td><td class="num">0.9 / 1.3</td><td>Opening cap and ramp top of a pair</td></tr>
+    <tr><td class="k">pairHoldH</td><td class="num">3</td><td>Unbooked pair is split after this many hours</td></tr>
+  </table></div>
+</section>
+
+<section id="limits">
+  <h2>Limits and open points</h2>
+  <ul>
+    <li><strong>On time has little room to spare.</strong> 6 of 96 test weeks were under 92% on time and the worst was 89.2%, just under the 90% line, so about one week in 96 is unranked.</li>
+    <li><strong>The config sits on a plateau.</strong> A screen of 14 more parameter changes around these values (pairKm 50, pairHoldH 2, minProfit 0.15, costUp 0.3 and others) found no edge.</li>
+    <li><strong>20,000 a week was not reached.</strong> The strongest team seen (Juhus) makes about 20.5k to 21k on public weeks. Their lead is in the dear tail from Thursday on: deliveries costing over 80% of their price are 26 to 35% of ours on Thursday and Friday, and 5 to 7% of theirs.</li>
+    <li><strong>No reaction to the flu day.</strong> It shows as 6 or more drops between 00:00 and 01:00 and roughly doubles the late share of orders due that day. The model does not use the signal.</li>
+    <li><strong>Result of the final:</strong> not in the repo at the time of this sync.</li>
+  </ul>
+  <p class="small muted">Sources: <span class="mono">Bahn-Spread/kit-final/algo.ts</span>, <span class="mono">core/model.ts</span>, <span class="mono">core/cost.ts</span>, <span class="mono">core/engine.ts</span>, <span class="mono">core/data/*.json</span>, <span class="mono">research/KNOWLEDGE.md</span>, <span class="mono">research/LEDGER.md</span>.</p>
+</section>
+
+</div>
+
+<script>
+(function(){
+  const sig = z => 1/(1+Math.exp(-z));
+  const fmt = (v,d=2) => v.toFixed(d);
+
+  // generic SVG line chart
+  function chart(el, o){
+    const W=o.w||420, H=o.h||230, L=46, R=14, T=14, B=36;
+    const sx = x => L + (x-o.x0)/(o.x1-o.x0)*(W-L-R);
+    const sy = y => H-B - (y-o.y0)/(o.y1-o.y0)*(H-T-B);
+    let s = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img" aria-label="${o.label||''}">`;
+    (o.bands||[]).forEach(b=>{ s+=`<rect class="${b.cls||'band'}" x="${sx(b.a)}" y="${T}" width="${sx(b.b)-sx(b.a)}" height="${H-T-B}"/>`; if(b.t) s+=`<text class="lab" x="${(sx(b.a)+sx(b.b))/2}" y="${T+13}" text-anchor="middle">${b.t}</text>`; });
+    o.yt.forEach(y=>{ s+=`<path class="grid" d="M${L},${sy(y)} H${W-R}"/><text class="tick" x="${L-6}" y="${sy(y)+4}" text-anchor="end">${o.yf?o.yf(y):y}</text>`; });
+    o.xt.forEach(x=>{ s+=`<text class="tick" x="${sx(x)}" y="${H-B+15}" text-anchor="middle">${o.xf?o.xf(x):x}</text>`; });
+    s+=`<path class="axis" d="M${L},${T} V${H-B} H${W-R}"/>`;
+    if(o.xl) s+=`<text class="lab" x="${(L+W-R)/2}" y="${H-4}" text-anchor="middle">${o.xl}</text>`;
+    (o.vmarks||[]).forEach(m=>{ s+=`<path class="mark" d="M${sx(m.x)},${T} V${H-B}"/>`; if(m.t) s+=`<text class="lab" x="${sx(m.x)+(m.left?-5:5)}" y="${T+ (m.dy||26)}" text-anchor="${m.left?'end':'start'}">${m.t}</text>`; });
+    o.series.forEach(se=>{ const d = se.pts.map((p,i)=> (i?(se.step?`H${sx(p[0])} V${sy(p[1])}`:`L${sx(p[0])},${sy(p[1])}`):`M${sx(p[0])},${sy(p[1])}`)).join(' '); s+=`<path class="${se.cls||'ln'}" d="${d}"/>`; });
+    (o.dots||[]).forEach(p=>{ s+=`<circle class="dot" cx="${sx(p[0])}" cy="${sy(p[1])}" r="5"/>`; });
+    el.innerHTML = s+'</svg>';
+  }
+
+  // fee term of the booking logit
+  const feeLogit = r => 5.1976*r - 3.2494*Math.max(0,r-1) - 2.9147*Math.max(0,r-1.4);
+  chart(document.getElementById('chFee'), {label:'Fee term of the booking logit by fee multiple', x0:0.6,x1:2,y0:2.5,y1:6.5, xt:[0.6,0.8,1,1.2,1.4,1.6,1.8,2], yt:[3,4,5,6], xf:x=>x.toFixed(1), xl:'fee, × typical',
+    vmarks:[{x:1,t:'1.0'},{x:1.4,t:'1.4'}], series:[{pts:[0.6,1,1.4,2].map(r=>[r,feeLogit(r)])}]});
+
+  // booking weights
+  const W = [['Typical fee (per log unit)',1.15],['Two-car gig',1.13],['Morning 07 to 10',1.08],['Urgent (after a warning)',0.73],['Car not ready yet (log h)',0.44],['Drive of 5 h or more',0.28],['Saturday',0.22],['Night 23 to 07',-0.18],['Private delivery address',-0.30],['Evening 16 to 20',-0.35],['Under 3 h to last pickup',-0.46],['Per drive hour',-0.47],['Our load in that town',-0.50],['Sunday',-0.70],['Premium car',-0.80],['Late evening 20 to 23',-0.97],['Time on the board (log h)',-1.00],['Private pickup address',-1.33]];
+  document.getElementById('bars').innerHTML = W.map(([n,v])=>{ const w=Math.abs(v)/1.4*50; return `<div>${n}</div><div class="track"><i class="${v>0?'pos':'neg'}" style="left:${v>0?50:50-w}%;width:${w}%"></i><span class="zero"></span></div><div class="v">${v>0?'+':'−'}${Math.abs(v).toFixed(2)}</div>`; }).join('');
+
+  // fee lifecycle
+  (function(){
+    const pts=[[0,0.81],[1,0.86],[2,0.91],[3,0.96],[4,1.01]];
+    for(let k=0;k<8;k++) pts.push([20+k, 1.01+(1.45-1.01)*(k+1)/8]);
+    for(let k=0;k<5;k++) pts.push([27+k*0.5, 1.3+0.15*k]);
+    [[30,0.832],[36,1.032],[42,1.232],[48,1.432]].forEach(p=>pts.push(p));
+    pts.push([50,1.432]);
+    chart(document.getElementById('chLife'), {w:820,h:300,label:'Fee over time for an unbooked gig', x0:0,x1:50,y0:0.6,y1:2.0, xt:[0,4,10,20,27,30,36,42,48], yt:[0.8,1.0,1.2,1.4,1.6,1.8,2.0], yf:y=>y.toFixed(1), xl:'hours since posting',
+      bands:[{a:0,b:4,t:'plan'},{a:20,b:27,t:'early ramp'},{a:27,b:30,cls:'band2',t:'warning'},{a:30,b:50,t:'late anyway'}],
+      vmarks:[{x:30,t:'last pickup time',dy:40}], series:[{pts,step:true}]});
+  })();
+
+  // lineage
+  const G=[];
+  if(document.getElementById('gain')) document.getElementById('gain').innerHTML = G.map(([b,t,g,se])=>`<b>${b}</b><div>${t}</div><div class="track"><i class="${g<2*se?'flat':''}" style="width:${g/700*100}%"></i></div><div class="v">+${g} ± ${se}</div>`).join('');
+
+  // explorer
+  const $=id=>document.getElementById(id);
+  function explore(){
+    const K=+$('xK').value, Lp=+$('xL').value, c=+$('xC').value, h=+$('xH').value;
+    $('oK').textContent=fmt(K); $('oL').textContent=Lp.toFixed(0); $('oC').textContent=fmt(c)+' ('+(c*Lp).toFixed(0)+' EUR)'; $('oH').textContent=h.toFixed(1);
+    const cost=c*Lp, cap=4*(h+1), win=[], val=[]; let best=-Infinity, mb=1.28;
+    for(let i=0;i<=72;i++){ const m=1.28+i*0.01, p=sig((Math.log(K)-Math.log(m))/0.1), v=p*(m*Lp-cost-cap); win.push([m,p]); val.push([m,v]); if(v>best){best=v;mb=m;} }
+    const pb=sig((Math.log(K)-Math.log(mb))/0.1);
+    const vs=val.map(p=>p[1]), lo=Math.min(0,...vs), hi=Math.max(1,...vs), pad=(hi-lo)*0.1;
+    const step=(hi-lo)>60?20:(hi-lo)>24?10:(hi-lo)>10?5:2, yt=[]; for(let y=Math.ceil((lo-pad)/step)*step;y<=hi+pad;y+=step) yt.push(y);
+    const xt=[1.3,1.4,1.5,1.6,1.7,1.8,1.9,2.0];
+    chart($('chWin'),{label:'Win chance by markup',x0:1.28,x1:2,y0:0,y1:1,xt,yt:[0,0.25,0.5,0.75,1],yf:y=>(y*100)+'%',xf:x=>x.toFixed(1),xl:'our price, × list',vmarks:[{x:mb}],series:[{pts:win}],dots:[[mb,pb]]});
+    chart($('chVal'),{label:'Expected value by markup',x0:1.28,x1:2,y0:lo-pad,y1:hi+pad,xt,yt,xf:x=>x.toFixed(1),xl:'our price, × list',vmarks:[{x:mb}],series:[{pts:val}],dots:[[mb,best]]});
+    const price=mb*Lp, ok=price>=1.1*cost;
+    $('readout').innerHTML=`<div><b>${fmt(mb)} ×</b>best markup${mb<1.2805?' (on the floor)':''}</div><div><b>${price.toFixed(0)} EUR</b>quoted price</div><div><b>${(pb*100).toFixed(0)}%</b>chance to win</div><div><b>${(price-cost).toFixed(0)} EUR</b>margin if won (before the ${cap.toFixed(0)} EUR capacity cost)</div><div><b>${ok?'Quote':'Decline'}</b>${ok?'price is at least 1.10 × cost':'price is under 1.10 × cost'}</div>`;
+  }
+  ['xK','xL','xC','xH'].forEach(id=>$(id).addEventListener('input',explore));
+  explore();
+})();
+</script>
+<script>window.MathJax={tex:{inlineMath:[['\\(','\\)']],displayMath:[['\\[','\\]']]},svg:{fontCache:'global'},options:{enableMenu:false}};</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.min.js"></script>
