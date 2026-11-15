@@ -137,6 +137,11 @@ ol.walk li{margin:0}
 table.why td:first-child{font-weight:600;min-width:150px}
 table.why td{min-width:170px}
 table.why td.num{min-width:110px}
+.stand{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:22px 32px}
+.stand>div{border-top:2px solid var(--blue);padding-top:10px;min-width:0;break-inside:avoid}
+.stand h3{margin:0 0 4px;font-size:1.3rem}
+.stand p{font-size:.94rem;max-width:none}
+.stand .ev{display:block;margin-top:6px;font-family:var(--mono);font-size:.78rem;color:var(--muted)}
 @page{size:A4;margin:13mm 12mm}
 @media print{
   :root{--bg:#f2f4f6}
@@ -161,7 +166,7 @@ table.why td.num{min-width:110px}
 <div class="wrap">
 
 <header style="display:flex;flex-direction:column;gap:18px">
-  <div class="eyebrow">Bahn: Spread · level 8 · synced 15 Nov 2026, commit af950d3</div>
+  <div class="eyebrow">Bahn: Spread · Junction 2026 · level 8</div>
   <h1>Seeker, the model that plays the final</h1>
   <p class="lede">A car-transport dispatcher for one simulated week in Finland. It prices about 1,000 dealer requests against a hidden competitor, then pays freelance drivers to move every car it wins. Everything it does follows from one estimate: <strong>the fee at which a driver takes this car in time</strong>.</p>
   <div class="facts">
@@ -170,11 +175,24 @@ table.why td.num{min-width:110px}
     <div><b>95 / 96</b><span>weeks ranked. The one that missed was at 89.2% on time</span></div>
     <div><b>87,241</b><span>ranking round 15 Nov 08:18, 5 weeks, all ranked, on time 96.0 to 99.3%</span></div>
   </div>
-  <div class="note screen-only"><p><strong>What the sync brought.</strong> One new commit from juuusooo (08:37): the <code>final_1115/</code> folder with a copy of the file the final process loaded. It is byte-identical to <code>kit-best/algo.ts</code> and <code>kit-final/algo.ts</code>, which this page describes. The repo holds no result of the final itself yet (no <code>final.json</code> or <code>score.json</code>), so this page describes the model, not how the final went.</p></div>
   <ul class="toc">
-    <li><a href="#big">Big picture</a></li><li><a href="#overview">Full flow</a></li><li><a href="#why">Why each part exists</a></li><li><a href="#quote">Prices</a></li><li><a href="#explorer">Price explorer</a></li><li><a href="#booking">Booking model</a></li><li><a href="#fees">Driver fees</a></li><li><a href="#pairs">Two-car gigs</a></li><li><a href="#learn">Learning</a></li><li><a href="#engine">Engine</a></li><li><a href="#params">Parameters</a></li><li><a href="#limits">Limits</a></li>
+    <li><a href="#stand">What stands out</a></li><li><a href="#big">Big picture</a></li><li><a href="#overview">Full flow</a></li><li><a href="#why">Why each part exists</a></li><li><a href="#quote">Prices</a></li><li><a href="#booking">Booking model</a></li><li><a href="#fees">Driver fees</a></li><li><a href="#pairs">Two-car gigs</a></li><li><a href="#learn">Learning</a></li><li><a href="#engine">Engine</a></li><li><a href="#params">Parameters</a></li><li><a href="#limits">Limits</a></li>
   </ul>
 </header>
+
+<section id="stand">
+  <h2>What stands out</h2>
+  <div class="stand">
+    <div><h3>One number drives every decision</h3><p>The fee at which a driver takes this car in time. Which options we sell, the price we quote, the fee schedule and the pairing of cars all read it from the same booking model, so the parts cannot disagree.</p></div>
+    <div><h3>Learning a price we never see</h3><p>The competitor's price is never shown; we only learn whether we won. A small filter turns every answer into an estimate of this week's price level, per weekday and per lane, and the next quote already uses it.</p><span class="ev">worth +419 ± 101 and +303 ± 83 EUR a week</span></div>
+    <div><h3>An outage inferred, not flagged</h3><p>Once a week the competitor goes down in one region. The model holds a probability over 31 possibilities (none, or around each of 30 towns) and prices against a blend of the competitor and its dearer backup.</p><span class="ev">worth +430 ± 144 EUR a week</span></div>
+    <div><h3>Pricing the real cost, not the planned one</h3><p>The planned driver fee explained 6% of what an order ended up costing. Trees fitted on 156,000 finished orders explain 27%, and using them in the price choice was one of the largest gains.</p><span class="ev">worth +644 ± 106 EUR a week</span></div>
+    <div><h3>Scarce drivers are priced, never refused</h3><p>About 200 drivers carry everything, so driver time has a price inside every quote: 4 EUR per driver-hour. A full town or a full deadline day costs the dealer 25% more instead of getting a no.</p><span class="ev">worth +600 to +800 EUR a week</span></div>
+    <div><h3>Fees that know when to stop</h3><p>The booking model shows that paying above 1.4 × the typical fee buys no extra bookings, so the ramp stops at 1.45. Once a car is late whatever we pay, the fee drops back to 0.83 instead of climbing.</p><span class="ev">fee floor and late fee: +530 ± 116 EUR a week</span></div>
+    <div><h3>Every part earned its place</h3><p>Each rule was kept only if it earned margin on fresh server weeks with the same seeds, usually 48 to 96 of them. Nine ideas that failed are listed with their results, including an LLM that agreed with the model's price 99% of the time.</p></div>
+    <div><h3>Small enough to read</h3><p>Every decision lives in one 416-line file with four functions, and every tunable value in one table. The engine can be restarted in the middle of the final and resumes from the server's state and its own saved learning.</p></div>
+  </div>
+</section>
 
 <section id="big">
   <h2>The big picture</h2>
@@ -407,24 +425,6 @@ table.why td.num{min-width:110px}
   <p class="cap">A deadline day (Mon to Fri) is full when our orders due that day reach 0.10 × the week's driver roster. Friday holds 40% of the lates, Monday deadlines have slack. If no option clears the 10% profit gate, the request is declined.</p>
 </section>
 
-<section id="explorer">
-  <h2>Price explorer</h2>
-  <p>The step 4 search on one request, with no shifts and a settled filter (<span class="mono">s = 0.1</span>). <span class="screen-only">Move the inputs to see how the best markup trades the win chance against the margin.</span> Numbers are examples, not a recorded request.</p>
-  <div class="panel" style="display:flex;flex-direction:column;gap:16px">
-    <div class="controls">
-      <label for="xK">Competitor price, × list <output id="oK"></output><input id="xK" type="range" min="1.20" max="1.60" step="0.01" value="1.39"></label>
-      <label for="xL">List price, EUR <output id="oL"></output><input id="xL" type="range" min="50" max="300" step="5" value="120"></label>
-      <label for="xC">Expected cost, × list <output id="oC"></output><input id="xC" type="range" min="0.40" max="1.30" step="0.01" value="0.75"></label>
-      <label for="xH">Drive, hours <output id="oH"></output><input id="xH" type="range" min="0.5" max="8" step="0.5" value="2"></label>
-    </div>
-    <div class="two">
-      <div><div class="eyebrow">Chance to win</div><div id="chWin"></div></div>
-      <div><div class="eyebrow">Expected value of the quote, EUR</div><div id="chVal"></div></div>
-    </div>
-    <div class="readout" id="readout"></div>
-  </div>
-</section>
-
 <section id="booking">
   <h2>The booking model</h2>
   <p>A logistic model answers one question: what is the chance that a driver books this gig within the next hour, at this fee? It was fitted on 160 weeks played with random fees, and both <code>quote()</code> and <code>fees()</code> build on it.</p>
@@ -578,13 +578,12 @@ table.why td.num{min-width:110px}
 </section>
 
 <section id="limits">
-  <h2>Limits and open points</h2>
+  <h2>Known limits</h2>
   <ul>
     <li><strong>On time has little room to spare.</strong> 6 of 96 test weeks were under 92% on time and the worst was 89.2%, just under the 90% line, so about one week in 96 is unranked.</li>
     <li><strong>The config sits on a plateau.</strong> A screen of 14 more parameter changes around these values (pairKm 50, pairHoldH 2, minProfit 0.15, costUp 0.3 and others) found no edge.</li>
-    <li><strong>20,000 a week was not reached.</strong> The strongest team seen (Juhus) makes about 20.5k to 21k on public weeks. Their lead is in the dear tail from Thursday on: deliveries costing over 80% of their price are 26 to 35% of ours on Thursday and Friday, and 5 to 7% of theirs.</li>
+    <li><strong>A dear tail late in the week.</strong> On Thursday and Friday, 26 to 35% of our deliveries cost over 80% of their price. Driver scarcity is priced with one flat rate, not one that tightens as the week fills up.</li>
     <li><strong>No reaction to the flu day.</strong> It shows as 6 or more drops between 00:00 and 01:00 and roughly doubles the late share of orders due that day. The model does not use the signal.</li>
-    <li><strong>Result of the final:</strong> not in the repo at the time of this sync.</li>
   </ul>
   <p class="small muted">Sources: <span class="mono">Bahn-Spread/kit-final/algo.ts</span>, <span class="mono">core/model.ts</span>, <span class="mono">core/cost.ts</span>, <span class="mono">core/engine.ts</span>, <span class="mono">core/data/*.json</span>, <span class="mono">research/KNOWLEDGE.md</span>, <span class="mono">research/LEDGER.md</span>.</p>
 </section>
@@ -654,8 +653,7 @@ table.why td.num{min-width:110px}
     const price=mb*Lp, ok=price>=1.1*cost;
     $('readout').innerHTML=`<div><b>${fmt(mb)} ×</b>best markup${mb<1.2805?' (on the floor)':''}</div><div><b>${price.toFixed(0)} EUR</b>quoted price</div><div><b>${(pb*100).toFixed(0)}%</b>chance to win</div><div><b>${(price-cost).toFixed(0)} EUR</b>margin if won (before the ${cap.toFixed(0)} EUR capacity cost)</div><div><b>${ok?'Quote':'Decline'}</b>${ok?'price is at least 1.10 × cost':'price is under 1.10 × cost'}</div>`;
   }
-  ['xK','xL','xC','xH'].forEach(id=>$(id).addEventListener('input',explore));
-  explore();
+  if($('xK')){ ['xK','xL','xC','xH'].forEach(id=>$(id).addEventListener('input',explore)); explore(); }
 })();
 </script>
 <script>window.MathJax={tex:{inlineMath:[['\\(','\\)']],displayMath:[['\\[','\\]']]},svg:{fontCache:'global'},options:{enableMenu:false}};</script>
