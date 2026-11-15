@@ -158,7 +158,7 @@ table.why td.num{min-width:110px}
   h2,h3{break-after:avoid}
   .panel,.eq,.note,tr,.tree li,.facts,.map3,ol.walk li{break-inside:avoid}
   .toc,.screen-only{display:none}
-  #why,#quote,#params{break-before:page}
+  #stand,#booking,#why,#params{break-before:page}
 }
 @media (max-width:520px){ .gain{grid-template-columns:54px minmax(0,1fr) 84px} .gain .track{display:none} }
 </style>
@@ -166,8 +166,8 @@ table.why td.num{min-width:110px}
 <div class="wrap">
 
 <header style="display:flex;flex-direction:column;gap:18px">
-  <div class="eyebrow">Bahn: Spread · Junction 2026 · level 8</div>
-  <h1>Seeker, the model that plays the final</h1>
+  <div class="eyebrow">Bahn: Spread · Junction 2026</div>
+  <h1>Seeker: a pricing and dispatch model for car transport</h1>
   <p class="lede">A car-transport dispatcher for one simulated week in Finland. It prices about 1,000 dealer requests against a hidden competitor, then pays freelance drivers to move every car it wins. Everything it does follows from one estimate: <strong>the fee at which a driver takes this car in time</strong>.</p>
   <div class="facts">
     <div><b>18,738</b><span>EUR mean weekly margin on 96 fresh server weeks</span></div>
@@ -176,26 +176,12 @@ table.why td.num{min-width:110px}
     <div><b>87,241</b><span>ranking round 15 Nov 08:18, 5 weeks, all ranked, on time 96.0 to 99.3%</span></div>
   </div>
   <ul class="toc">
-    <li><a href="#stand">What stands out</a></li><li><a href="#big">Big picture</a></li><li><a href="#overview">Full flow</a></li><li><a href="#why">Why each part exists</a></li><li><a href="#quote">Prices</a></li><li><a href="#booking">Booking model</a></li><li><a href="#fees">Driver fees</a></li><li><a href="#pairs">Two-car gigs</a></li><li><a href="#learn">Learning</a></li><li><a href="#engine">Engine</a></li><li><a href="#params">Parameters</a></li><li><a href="#limits">Limits</a></li>
+    <li><a href="#big">Overview</a></li><li><a href="#overview">System diagram</a></li><li><a href="#stand">Main ideas</a></li><li><a href="#booking">1 Booking model</a></li><li><a href="#quote">2 Prices</a></li><li><a href="#learn">3 Learning</a></li><li><a href="#fees">4 Driver fees</a></li><li><a href="#pairs">5 Two-car gigs</a></li><li><a href="#engine">6 Engine</a></li><li><a href="#why">Design decisions</a></li><li><a href="#params">Parameters</a></li><li><a href="#limits">Limits</a></li>
   </ul>
 </header>
 
-<section id="stand">
-  <h2>What stands out</h2>
-  <div class="stand">
-    <div><h3>One number drives every decision</h3><p>The fee at which a driver takes this car in time. Which options we sell, the price we quote, the fee schedule and the pairing of cars all read it from the same booking model, so the parts cannot disagree.</p></div>
-    <div><h3>Learning a price we never see</h3><p>The competitor's price is never shown; we only learn whether we won. A small filter turns every answer into an estimate of this week's price level, per weekday and per lane, and the next quote already uses it.</p><span class="ev">worth +419 ± 101 and +303 ± 83 EUR a week</span></div>
-    <div><h3>An outage inferred, not flagged</h3><p>Once a week the competitor goes down in one region. The model holds a probability over 31 possibilities (none, or around each of 30 towns) and prices against a blend of the competitor and its dearer backup.</p><span class="ev">worth +430 ± 144 EUR a week</span></div>
-    <div><h3>Pricing the real cost, not the planned one</h3><p>The planned driver fee explained 6% of what an order ended up costing. Trees fitted on 156,000 finished orders explain 27%, and using them in the price choice was one of the largest gains.</p><span class="ev">worth +644 ± 106 EUR a week</span></div>
-    <div><h3>Scarce drivers are priced, never refused</h3><p>About 200 drivers carry everything, so driver time has a price inside every quote: 4 EUR per driver-hour. A full town or a full deadline day costs the dealer 25% more instead of getting a no.</p><span class="ev">worth +600 to +800 EUR a week</span></div>
-    <div><h3>Fees that know when to stop</h3><p>The booking model shows that paying above 1.4 × the typical fee buys no extra bookings, so the ramp stops at 1.45. Once a car is late whatever we pay, the fee drops back to 0.83 instead of climbing.</p><span class="ev">fee floor and late fee: +530 ± 116 EUR a week</span></div>
-    <div><h3>Every part earned its place</h3><p>Each rule was kept only if it earned margin on fresh server weeks with the same seeds, usually 48 to 96 of them. Nine ideas that failed are listed with their results, including an LLM that agreed with the model's price 99% of the time.</p></div>
-    <div><h3>Small enough to read</h3><p>Every decision lives in one 416-line file with four functions, and every tunable value in one table. The engine can be restarted in the middle of the final and resumes from the server's state and its own saved learning.</p></div>
-  </div>
-</section>
-
 <section id="big">
-  <h2>The big picture</h2>
+  <h2>Overview</h2>
   <p>We are a middleman. A dealer pays us a price to move a car, and we pay a freelance driver a fee to do it. The score is what is left over, and it only counts if at least 90% of the cars arrive on time.</p>
   <div class="panel">
     <div class="money">
@@ -228,7 +214,7 @@ table.why td.num{min-width:110px}
 </section>
 
 <section id="overview">
-  <h2>The full flow</h2>
+  <h2>System diagram</h2>
   <p>Two loops share one set of offline-fitted tables. The top loop sells: a request comes in, <code>quote()</code> answers, the dealer's choice teaches <code>learn()</code> the competitor's price this week. The bottom loop delivers: a won car is posted to the driver board, alone or paired, with a fee schedule from <code>fees()</code>.</p>
   <div class="scroll panel">
   <svg viewBox="0 0 980 660" style="min-width:820px;width:100%;height:auto" role="img" aria-label="Full flow of the Seeker model with the steps inside each function">
@@ -320,57 +306,49 @@ table.why td.num{min-width:110px}
     <text x="103" y="262" font-size="11" class="t-muted">dealer trust:</text><text x="103" y="277" font-size="11" class="t-muted">+1 on time,</text><text x="103" y="292" font-size="11" class="t-muted">halved if late</text>
   </svg>
   </div>
-  <p class="cap">Blue boxes are the four functions in <code>algo.ts</code> (416 lines, every decision), with their steps listed inside. Dashed lines are table lookups, and each table names the functions that read it. The engine (<code>core/engine.ts</code>) does the mechanics and calls the four. The sections from <a href="#quote">Prices</a> on give the formulas behind each box.</p>
+  <p class="cap">Blue boxes are the four functions in <code>algo.ts</code> (416 lines, every decision), with their steps listed inside. Dashed lines are table lookups, and each table names the functions that read it. The engine (<code>core/engine.ts</code>) does the mechanics and calls the four. The numbered sections below give the formulas behind each box.</p>
 </section>
 
-<section id="why">
-  <h2>Why each part exists</h2>
-  <p>Nothing here was designed up front. Each part was added because a specific problem showed up in played weeks, and it stayed only if it earned margin on fresh server weeks with the same seeds. The last column is what the part was worth in EUR a week, tested with and without it.</p>
-  <div class="scroll"><table class="why">
-    <tr><th>Part</th><th>The problem it solved</th><th>What it does</th><th class="num">Worth</th></tr>
-    <tr class="grp"><td colspan="4">Knowing what a car costs</td></tr>
-    <tr><td>Denoised typical fee<br><span class="mono small muted">typMinN</span></td><td>The dealer's "typical fee" carries about 13% random noise per request. Drivers mostly ignore it, so paying by it overpays half the gigs and underpays the rest.</td><td>Replaces it with a per-lane average from 899 lanes.</td><td class="num">+200 to +400</td></tr>
-    <tr><td>Realized-cost trees<br><span class="mono small muted">costW</span></td><td>The planner's expected fee barely predicted what an order ended up costing (R² 0.06). Raises, drops, failed visits and refunds were invisible when pricing.</td><td>Trees predict the full final cost from what is known at quote time (R² 0.27). Cheap gigs turn out dearer per euro than the plan says.</td><td class="num">+644 ± 106</td></tr>
-    <tr><td>Hard options<br><span class="mono small muted">minBookChance, hardChance, hardPrice</span></td><td>Some deadline options are unlikely to find a driver in time. Refusing them all loses sales, selling them all breaks the 90% on-time line.</td><td>Three bands: refuse under 0.82, sell 20% dearer up to 0.95, normal above.</td><td class="num">not measured alone</td></tr>
-    <tr class="grp"><td colspan="4">Rationing drivers</td></tr>
-    <tr><td>Capacity cost and a lower floor<br><span class="mono small muted">capLam, capConst, markupMin</span></td><td>With a high price floor, 43% of quotes sat on it, so the floor was choosing our orders. Drivers, not demand, are the limit: about 200 carry everything.</td><td>A low floor of 1.28, and a charge of 4 EUR per driver-hour on each quote, so long drives must earn more to be worth a driver.</td><td class="num">+600 to +800</td></tr>
-    <tr><td>Full town, full day<br><span class="mono small muted">capPerDriver, dueCapPer, fullPrice</span></td><td>Orders piled up in one town or on one deadline day and went late together. Friday-due orders held 40% of all lates.</td><td>Past a load limit, prices rise 25% instead of declining. The few orders still won pay for the risk.</td><td class="num">keeps weeks ranked; day cap +190</td></tr>
-    <tr><td>Price by deadline day<br><span class="mono small muted">dueMon, dueFri</span></td><td>Friday is the tight day, and Monday deadlines have slack because no new requests arrive over the weekend.</td><td>Friday-due +8% of list, next-Monday-due −3%.</td><td class="num">+120 ± 63</td></tr>
-    <tr class="grp"><td colspan="4">Reading the competitor</td></tr>
-    <tr><td>Weekday price learning<br><span class="mono small muted">pS, pWeek, pDay</span></td><td>The competitor sits 26% to 54% above list, different every week, and swings 12% between weekdays. One fixed price curve is wrong most days.</td><td>A filter learns a week level and a level per weekday from every win and loss. The weekday prior has to be wide (SD 0.14 in log price) or the filter learns nothing.</td><td class="num">+419 ± 101</td></tr>
-    <tr><td>Lane level<br><span class="mono small muted">pLane</span></td><td>Inside a week the competitor is consistently dear or cheap on a given lane, and 64% of requests come on a lane already asked that week.</td><td>One more learned level per lane.</td><td class="num">+303 ± 83 (one of four sets negative)</td></tr>
-    <tr><td>Floor follows the level<br><span class="mono small muted">floorLvl</span></td><td>In a cheap week or on a price-war day the fixed floor priced us out for whole days.</td><td>The floor drops with the learned level, by at most 0.20.</td><td class="num">+222 ± 58</td></tr>
-    <tr><td>Outage belief<br><span class="mono small muted">outBayes, outageK, outage</span></td><td>In a live test final the competitor went down around Helsinki. Priced at the floor, we won 79% of 108 requests, far too cheap, and a simple yes/no flag also fired outside the region.</td><td>A probability per region, with the win chance mixed between competitor and backup. The backup factor is 1.2 because stored quotes show wins hold up to 1.2 × and collapse by 1.3 ×.</td><td class="num">+430 ± 144</td></tr>
-    <tr class="grp"><td colspan="4">Paying drivers</td></tr>
-    <tr><td>Planned schedule, not a flat fee<br><span class="mono small muted">openMin, openMax, raiseMax, steps, lateCost</span></td><td>Flat fees lost at every level tried: cheap ones miss drivers, dear ones overpay. Only 38% of gigs book at the opening fee.</td><td>Opens low and raises hourly, with the pair (open, raise) chosen per gig by expected cost.</td><td class="num">opening floor and late fee: +530 ± 116</td></tr>
-    <tr><td>Early ramp<br><span class="mono small muted">rampTop, rampWindowH</span></td><td>A gig still unbooked the evening before its pickup day is 12.6% late, a booked one 2.3%. Raising at the last minute is too late.</td><td>Climbs to 1.45 × over the last 10 hours, ending 3 hours before the last pickup. It stops at 1.45 because the booking model shows no gain past 1.4.</td><td class="num">not measured alone</td></tr>
-    <tr><td>Late fee<br><span class="mono small muted">lateFee</span></td><td>Once the last pickup time has passed the order is late whatever we pay, yet the fee kept climbing.</td><td>Drops back to 0.83 × and climbs slowly.</td><td class="num">part of the +530</td></tr>
-    <tr><td>Cheaper fees from Thursday<br><span class="mono small muted">feeLate</span></td><td>In a test final, gigs posted on Thursday and Friday booked at 0.99 × typical against 0.87 on Monday: we overpaid late in the week.</td><td>Planned fees × 0.95 from Thursday on.</td><td class="num">+168 ± 45</td></tr>
-    <tr><td>Booking shift<br><span class="mono small muted">bookShift, bookQuote</span></td><td>The booking model is slightly too pessimistic about how fast drivers book. Correcting it everywhere sold more orders and cost ranked weeks.</td><td>Corrects it in the fee schedules only, so fees open lower while sales stay the same.</td><td class="num">+320 ± 50</td></tr>
-    <tr class="grp"><td colspan="4">Details that prevent failures</td></tr>
-    <tr><td>Note reading<br><span class="mono small muted">noteHours, pairFlags, hoursMinLeftH</span></td><td>Orders whose note gave real opening hours were 14 to 19% late, with 27 visits to closed sites per 100.</td><td>Reads hours, ready times, plates and gearbox from the note and plans around them.</td><td class="num">+251 ± 94; failed visits 3.5 → 0.6 a week</td></tr>
-    <tr><td>Two-car gigs<br><span class="mono small muted">pairKm, pairSlackH, pairCap, pairTop, pairHoldH</span></td><td>Every single-car gig pays a driver's empty trips. But a third of the pairs that nobody booked went late.</td><td>Joins cars into a chain when the join is short and there is slack, and splits the pair after 3 hours unbooked.</td><td class="num">the 40 km and 3 h settings: +213 ± 70</td></tr>
-  </table></div>
-  <h3>Tried and left out</h3>
-  <ul>
-    <li><strong>Buying dealer trust</strong> with lower prices: loses money in every form tried.</li>
-    <li><strong>An LLM choosing each price:</strong> it picked the model's price in 99% of requests.</li>
-    <li><strong>Requoting</strong> just before the dealer decides: nothing measurable.</li>
-    <li><strong>Posting gigs late</strong> to save fees: loses 1,200 to 6,300 a week and breaks on time.</li>
-    <li><strong>Opening high and repricing down:</strong> the first viewers book at the high fee.</li>
-    <li><strong>Direct offers to drivers:</strong> 0.2 to 5% accepted.</li>
-    <li><strong>Declining long hauls or premium cars:</strong> they are profitable; declining loses 160 to 840 a week.</li>
-    <li><strong>Fees tilted by gig size</strong> (cheap gigs paid relatively more): costs about 1 point of on time for no margin.</li>
-    <li><strong>A model refitted on our own policy's weeks:</strong> better fit, 1,100 a week worse in play.</li>
-  </ul>
+<section id="stand">
+  <h2>Main ideas</h2>
+  <p>The design choices that matter most. Each is covered in detail in the numbered sections below.</p>
+  <div class="stand">
+    <div><h3>One booking model behind every decision</h3><p>The model estimates the fee at which a driver takes a car in time. Which options we sell, the price we quote, the fee schedule and the pairing of cars all read it from the same booking model, so the parts cannot disagree.</p></div>
+    <div><h3>Competitor price learned from wins and losses</h3><p>The competitor's price is never shown; we only learn whether we won. A small filter turns every answer into an estimate of this week's price level, per weekday and per lane, and the next quote already uses it.</p><span class="ev">worth +419 ± 101 and +303 ± 83 EUR a week</span></div>
+    <div><h3>Competitor outage estimated as a probability</h3><p>Once a week the competitor goes down in one region. The model holds a probability over 31 possibilities (none, or around each of 30 towns) and prices against a blend of the competitor and its dearer backup.</p><span class="ev">worth +430 ± 144 EUR a week</span></div>
+    <div><h3>Realized cost in the price choice</h3><p>The planned driver fee explained 6% of what an order ended up costing. Trees fitted on 156,000 finished orders explain 27%, and using them in the price choice was one of the largest gains.</p><span class="ev">worth +644 ± 106 EUR a week</span></div>
+    <div><h3>Driver capacity priced into every quote</h3><p>About 200 drivers carry everything, so driver time has a price inside every quote: 4 EUR per driver-hour. A full town or a full deadline day costs the dealer 25% more instead of getting a no.</p><span class="ev">worth +600 to +800 EUR a week</span></div>
+    <div><h3>Limits on the fee schedule</h3><p>The booking model shows that paying above 1.4 × the typical fee buys no extra bookings, so the ramp stops at 1.45. Once a car is late whatever we pay, the fee drops back to 0.83 instead of climbing.</p><span class="ev">fee floor and late fee: +530 ± 116 EUR a week</span></div>
+    <div><h3>Testing method</h3><p>Each rule was kept only if it earned margin on fresh server weeks with the same seeds, usually 48 to 96 of them. Ideas that did not pass were removed.</p></div>
+    <div><h3>Code structure</h3><p>Every decision lives in one 416-line file with four functions, and every tunable value in one table. The engine can be restarted in the middle of the final and resumes from the server's state and its own saved learning.</p></div>
+  </div>
+</section>
+
+<section id="booking">
+  <h2>1. The booking model and the fee planner</h2>
+  <p>A logistic model answers one question: what is the chance that a driver books this gig within the next hour, at this fee? It was fitted on 160 weeks played with random fees. It comes first because both the prices (section 2) and the driver fees (section 4) are built on it.</p>
+  <div class="eq">\[ p_{\text{book}}(t, r) \;=\; \sigma\Big( -9.33 \;+\; \underbrace{\textstyle\sum_j \beta_j\,x_j(t)}_{\text{gig and clock}} \;+\; \underbrace{5.20\,r \;-\; 3.25\,\max(0,\,r-1) \;-\; 2.91\,\max(0,\,r-1.4)}_{\text{fee } r \text{ as a multiple of the typical fee}} \Big) \]</div>
+  <div class="two">
+    <div class="panel"><div class="eyebrow">Fee term of the logit, by fee multiple r</div><div id="chFee"></div>
+      <p class="small muted">Slope 5.2 up to the typical fee, 1.95 from 1.0 to 1.4, then −0.97: in the model, paying above 1.4 × typical buys no extra bookings. This is why the early ramp stops at 1.45.</p></div>
+    <div class="panel"><div class="eyebrow">Other weights (logit units)</div><div class="bars" id="bars"></div></div>
+  </div>
+  <p class="cap">Reading the bars: a gig is easier to book in the morning, as a two-car gig, and when its typical fee is large. It is harder at a private pickup address, late in the evening, on Sunday, for premium cars (experienced drivers only), with long drives, and the longer it has already sat on the board.</p>
+  <h3>The fee planner</h3>
+  <p>For a gig posted now with \(H\) hours to its last pickup time (at most 72), the planner tries every opening fee from 0.706 to 1.6 in steps of 0.05 and every hourly raise in {0, 0.05, 0.1, 0.2}, and walks the hours:</p>
+  <div class="eq">\[ r_k = \text{open} + \text{raise}\cdot\min(k,\,4), \qquad p_k = \sigma\big(z_k + b + f(r_k)\big), \qquad U_0 = 1,\;\; U_{k+1} = U_k\,(1-p_k) \]</div>
+  <div class="eq">\[ \text{expected cost} \;=\; \sum_{k=0}^{H-1} U_k\,p_k\,r_k \;+\; U_H \times 4 \qquad\quad \text{chance booked in time} \;=\; 1-U_H \]</div>
+  <p class="cap">\(z_k\) is the gig-and-clock part of the logit in hour \(k\), \(f\) the fee term above, and 4 × typical is what a gig without a driver is counted as (<span class="mono">lateCost</span>). The cheapest (open, raise) pair wins. Raises stop after 4 steps.</p>
+  <div class="note"><p><strong>The booking shift.</strong> \(b\) = <span class="mono">bookShift</span> = 0.2 is added to the logit, but only when planning fee schedules. In <code>quote()</code> the planner runs with \(b = 0\). The booking model is a little too pessimistic about how fast drivers book, so the schedules can open lower, while which options are sold and at what price stays the same. Alone this was worth about +300 a week with orders unchanged.</p></div>
+
 </section>
 
 <section id="quote">
-  <h2>Prices: <span class="mono" style="font-size:.8em">quote()</span></h2>
+  <h2>2. Prices: <span class="mono" style="font-size:.8em">quote()</span></h2>
   <p>Each request offers up to three delivery options (same day, next day, within 3 days). The model decides which options to sell, picks <em>one</em> markup for the whole request, then adjusts each option's price.</p>
 
   <h3>Step 1. Which options are sellable</h3>
-  <p>For every option the fee planner (see <a href="#fees">Driver fees</a>) returns the cheapest schedule, its expected cost, and the chance a driver books before the last pickup time. The last pickup time is the deadline minus the drive, moved by anything the dealer's note says (car ready later, deliver earlier, real site hours).</p>
+  <p>For every option the fee planner (section 1) returns the cheapest schedule, its expected cost, and the chance a driver books before the last pickup time. The last pickup time is the deadline minus the drive, moved by anything the dealer's note says (car ready later, deliver earlier, real site hours).</p>
   <div class="panel">
   <ul class="tree">
     <li><span class="q">Does the last pickup time leave at least 3 h after the car is ready?</span>
@@ -390,7 +368,7 @@ table.why td.num{min-width:110px}
         </li>
       </ul>
     </li>
-    <li><span class="q">No option left?</span> <span class="stop">Decline.</span> At level 4 and up the engine sends a quote at 10 × list instead of staying silent: losing is free, silence costs goodwill.</li>
+    <li><span class="q">No option left?</span> <span class="stop">Decline.</span> The engine then sends a quote at 10 × list instead of staying silent: losing is free, silence costs goodwill.</li>
   </ul>
   </div>
 
@@ -409,7 +387,7 @@ table.why td.num{min-width:110px}
 
   <h3>Step 4. One markup for the request</h3>
   <div class="eq">\[ m^{*} \;=\; \underset{m\,\in\,[\,1.28+\Delta,\;2.00+\Delta\,],\ \text{step } 0.01}{\arg\max}\;\; P(\text{win}\mid m)\,\Big(m\cdot\overline{\text{list}} \;-\; \overline{\text{cost}} \;-\; \underbrace{4\,\text{EUR}\times(\text{drive hours}+1)}_{\text{capacity cost}}\Big) \]</div>
-  <p class="cap">Bars mean the average over the sellable options. The capacity cost is a shadow price on driver time: at level 8 drivers are the bottleneck, so a car that holds a driver longer must earn more. It is subtracted in the choice only, never paid.</p>
+  <p class="cap">Bars mean the average over the sellable options. The capacity cost is a shadow price on driver time: drivers are the bottleneck, so a car that holds a driver longer must earn more. It is subtracted in the choice only, never paid.</p>
   <p>The search window slides by \(\Delta\), the sum of these shifts (all in multiples of list):</p>
   <div class="scroll"><table>
     <tr><th>Condition</th><th class="num">Shift Δ</th><th>Why</th></tr>
@@ -425,27 +403,25 @@ table.why td.num{min-width:110px}
   <p class="cap">A deadline day (Mon to Fri) is full when our orders due that day reach 0.10 × the week's driver roster. Friday holds 40% of the lates, Monday deadlines have slack. If no option clears the 10% profit gate, the request is declined.</p>
 </section>
 
-<section id="booking">
-  <h2>The booking model</h2>
-  <p>A logistic model answers one question: what is the chance that a driver books this gig within the next hour, at this fee? It was fitted on 160 weeks played with random fees, and both <code>quote()</code> and <code>fees()</code> build on it.</p>
-  <div class="eq">\[ p_{\text{book}}(t, r) \;=\; \sigma\Big( -9.33 \;+\; \underbrace{\textstyle\sum_j \beta_j\,x_j(t)}_{\text{gig and clock}} \;+\; \underbrace{5.20\,r \;-\; 3.25\,\max(0,\,r-1) \;-\; 2.91\,\max(0,\,r-1.4)}_{\text{fee } r \text{ as a multiple of the typical fee}} \Big) \]</div>
-  <div class="two">
-    <div class="panel"><div class="eyebrow">Fee term of the logit, by fee multiple r</div><div id="chFee"></div>
-      <p class="small muted">Slope 5.2 up to the typical fee, 1.95 from 1.0 to 1.4, then −0.97: in the model, paying above 1.4 × typical buys no extra bookings. This is why the early ramp stops at 1.45.</p></div>
-    <div class="panel"><div class="eyebrow">Other weights (logit units)</div><div class="bars" id="bars"></div></div>
-  </div>
-  <p class="cap">Reading the bars: a gig is easier to book in the morning, as a two-car gig, and when its typical fee is large. It is harder at a private pickup address, late in the evening, on Sunday, for premium cars (experienced drivers only), with long drives, and the longer it has already sat on the board.</p>
+<section id="learn">
+  <h2>3. Learning during the week: <span class="mono" style="font-size:.8em">learn()</span></h2>
+  <p>Section 2 uses two quantities that change during the week: the competitor's price level and the chance of an outage. Both are updated after every answer.</p>
+  <h3>The price filter</h3>
+  <p>The competitor sits 26% to 54% above list, at a different level every week, with a weekday swing and a level per lane inside the week. The state \(x\) holds one number for the week, five for the weekdays and one per lane (pickup × delivery town, single cars, created when first asked). Every won or lost quote is one logistic observation; the update is a one-step Kalman-style correction.</p>
+  <div class="eq">\[ \hat p = \sigma\!\left(\frac{g + h^{\top}x - \ln m}{0.1}\right), \qquad w=\hat p\,(1-\hat p), \qquad a = \frac{P\,h}{0.1}, \qquad k = \frac{w}{1 + w\,h^{\top}a/0.1} \]</div>
+  <div class="eq">\[ P \;\leftarrow\; P - k\,a\,a^{\top}, \qquad\quad x \;\leftarrow\; x + \frac{P\,h}{0.1}\,\big(\text{won} - \hat p\big) \]</div>
+  <p class="cap">\(h\) marks which levels this request touches. \(P\) starts diagonal with prior SDs in log price: week 0.05, weekday 0.14, lane 0.06. Winning more than expected raises the levels, and the next quotes go out dearer. Dealer and town levels exist in the code but have prior 0 (tested, no gain).</p>
+
+  <h3>The outage belief</h3>
+  <p>Once a week the competitor is down in one region (a town and everything within 80 km) for a working day. The model holds a probability over 31 hypotheses: no outage today, or an outage around each of the 30 towns.</p>
+  <div class="eq">\[ \text{prior}(\text{outage today}) = \min\!\Big(0.6,\ \frac{1}{5-\text{day}}\Big)\ \text{if not seen yet this week, split over towns by}\ \ 1 + \#\{\text{our requests near town } c\} \]</div>
+  <div class="eq">\[ \text{post}(c) \;\propto\; \text{prior}(c)\prod_{\text{today's answers } i} \begin{cases} \ell_i(\mu_i + \ln 1.2) &amp; \text{pickup}_i \text{ within 80 km of } c\\ \ell_i(\mu_i) &amp; \text{otherwise}\end{cases} \qquad q(\text{place}) = \sum_{c\,:\,\text{place near } c}\text{post}(c) \]</div>
+  <p class="cap">\(\ell_i\) is the chance of the answer we actually got (won or lost) at the price we quoted, clipped to 0.08 to 0.92 so one answer cannot decide it. \(q\) feeds the mixture in step 3 and the +0.30 × q shift in step 4. The price filter reads each answer against the expected price there, so an outage does not drag the whole weekday level up. Once the belief passes 0.9 on a day, the outage counts as seen and its prior is 0 for the rest of the week.</p>
 </section>
 
 <section id="fees">
-  <h2>Driver fees: <span class="mono" style="font-size:.8em">fees()</span></h2>
-  <h3>The planner</h3>
-  <p>For a gig posted now with \(H\) hours to its last pickup time (at most 72), the planner tries every opening fee from 0.706 to 1.6 in steps of 0.05 and every hourly raise in {0, 0.05, 0.1, 0.2}, and walks the hours:</p>
-  <div class="eq">\[ r_k = \text{open} + \text{raise}\cdot\min(k,\,4), \qquad p_k = \sigma\big(z_k + b + f(r_k)\big), \qquad U_0 = 1,\;\; U_{k+1} = U_k\,(1-p_k) \]</div>
-  <div class="eq">\[ \text{expected cost} \;=\; \sum_{k=0}^{H-1} U_k\,p_k\,r_k \;+\; U_H \times 4 \qquad\quad \text{chance booked in time} \;=\; 1-U_H \]</div>
-  <p class="cap">\(z_k\) is the gig-and-clock part of the logit in hour \(k\), \(f\) the fee term above, and 4 × typical is what a gig without a driver is counted as (<span class="mono">lateCost</span>). The cheapest (open, raise) pair wins. Raises stop after 4 steps.</p>
-  <div class="note"><p><strong>The booking shift.</strong> \(b\) = <span class="mono">bookShift</span> = 0.2 is added to the logit, but only when planning fee schedules. In <code>quote()</code> the planner runs with \(b = 0\). The booking model is a little too pessimistic about how fast drivers book, so the schedules can open lower, while which options are sold and at what price stays the same. Alone this was worth about +300 a week with orders unchanged.</p></div>
-
+  <h2>4. Driver fees: <span class="mono" style="font-size:.8em">fees()</span></h2>
+  <p>When a gig is posted, the planner from section 1 sets its opening fee and hourly raises. Fixed rules take over as the last pickup time approaches.</p>
   <h3>The life of a fee schedule</h3>
   <div class="panel"><div class="eyebrow">Example: gig posted 30 h before its last pickup time, plan = open 0.81, raise 0.05</div><div class="scroll"><div id="chLife" style="min-width:620px"></div></div></div>
   <p class="cap">Fee as a multiple of the typical fee, while nobody has booked. The opening fee and raise in this example are illustrative; the other levels are the model's parameters. The warning schedule restarts at 1.30, which is under the ramp's top of 1.45.</p>
@@ -473,7 +449,7 @@ table.why td.num{min-width:110px}
 </section>
 
 <section id="pairs">
-  <h2>Two cars, one driver: <span class="mono" style="font-size:.8em">pair()</span></h2>
+  <h2>5. Two-car gigs: <span class="mono" style="font-size:.8em">pair()</span></h2>
   <p>A driver who takes two cars in a chain pays one trip to the first pickup and one trip home, and the booking model gives two-car gigs a large bonus (+1.13 in the logit). When a one-car order is won, the engine checks every open, unbooked one-car gig of ours in both orders (new car first, new car second).</p>
   <div class="panel">
   <ul class="tree">
@@ -501,23 +477,8 @@ table.why td.num{min-width:110px}
   </div>
 </section>
 
-<section id="learn">
-  <h2>Learning during the week: <span class="mono" style="font-size:.8em">learn()</span></h2>
-  <h3>The price filter</h3>
-  <p>The competitor sits 26% to 54% above list, at a different level every week, with a weekday swing and a level per lane inside the week. The state \(x\) holds one number for the week, five for the weekdays and one per lane (pickup × delivery town, single cars, created when first asked). Every won or lost quote is one logistic observation; the update is a one-step Kalman-style correction.</p>
-  <div class="eq">\[ \hat p = \sigma\!\left(\frac{g + h^{\top}x - \ln m}{0.1}\right), \qquad w=\hat p\,(1-\hat p), \qquad a = \frac{P\,h}{0.1}, \qquad k = \frac{w}{1 + w\,h^{\top}a/0.1} \]</div>
-  <div class="eq">\[ P \;\leftarrow\; P - k\,a\,a^{\top}, \qquad\quad x \;\leftarrow\; x + \frac{P\,h}{0.1}\,\big(\text{won} - \hat p\big) \]</div>
-  <p class="cap">\(h\) marks which levels this request touches. \(P\) starts diagonal with prior SDs in log price: week 0.05, weekday 0.14, lane 0.06. Winning more than expected raises the levels, and the next quotes go out dearer. Dealer and town levels exist in the code but have prior 0 (tested, no gain).</p>
-
-  <h3>The outage belief</h3>
-  <p>Once a week the competitor is down in one region (a town and everything within 80 km) for a working day. The model holds a probability over 31 hypotheses: no outage today, or an outage around each of the 30 towns.</p>
-  <div class="eq">\[ \text{prior}(\text{outage today}) = \min\!\Big(0.6,\ \frac{1}{5-\text{day}}\Big)\ \text{if not seen yet this week, split over towns by}\ \ 1 + \#\{\text{our requests near town } c\} \]</div>
-  <div class="eq">\[ \text{post}(c) \;\propto\; \text{prior}(c)\prod_{\text{today's answers } i} \begin{cases} \ell_i(\mu_i + \ln 1.2) &amp; \text{pickup}_i \text{ within 80 km of } c\\ \ell_i(\mu_i) &amp; \text{otherwise}\end{cases} \qquad q(\text{place}) = \sum_{c\,:\,\text{place near } c}\text{post}(c) \]</div>
-  <p class="cap">\(\ell_i\) is the chance of the answer we actually got (won or lost) at the price we quoted, clipped to 0.08 to 0.92 so one answer cannot decide it. \(q\) feeds the mixture in step 3 and the +0.30 × q shift in step 4. The price filter reads each answer against the expected price there, so an outage does not drag the whole weekday level up. Once the belief passes 0.9 on a day, the outage counts as seen and its prior is 0 for the rest of the week.</p>
-</section>
-
 <section id="engine">
-  <h2>What the engine does around the four functions</h2>
+  <h2>6. The engine around the four functions</h2>
   <div class="scroll"><table>
     <tr><th>Event</th><th>Reaction</th></tr>
     <tr><td class="k">price_request</td><td><strong>Denoise the typical fee.</strong> The dealer's typical fee carries about 13% noise that drivers mostly ignore. It is replaced by a lane-table prediction (899 lanes, with small terms for private addresses, premium, electric), unless the lane was seen fewer than 5 times. Then <code>quote()</code>.</td></tr>
@@ -530,6 +491,36 @@ table.why td.num{min-width:110px}
     <tr><td class="k">delivered</td><td>Dealer trust +1 if on time (up to 25), halved if late. Trust raises the price that dealer accepts.</td></tr>
   </table></div>
   <p class="cap">The note reader is a regex reader in Finnish, Swedish and English, 97 to 99% right on ready time, deadline, plates and manual gearbox. 42.5% of won orders carry a note, and 70% of notes change nothing.</p>
+</section>
+
+<section id="why">
+  <h2>Design decisions and their measured effect</h2>
+  <p>This table summarises the parts described in sections 1 to 6. Each was added in response to a specific problem seen in played weeks, and was kept only if it earned margin on fresh server weeks with the same seeds. The last column is what the part was worth in EUR a week, tested with and without it.</p>
+  <div class="scroll"><table class="why">
+    <tr><th>Part</th><th>The problem it solved</th><th>What it does</th><th class="num">Worth</th></tr>
+    <tr class="grp"><td colspan="4">Knowing what a car costs</td></tr>
+    <tr><td>Denoised typical fee<br><span class="mono small muted">typMinN</span></td><td>The dealer's "typical fee" carries about 13% random noise per request. Drivers mostly ignore it, so paying by it overpays half the gigs and underpays the rest.</td><td>Replaces it with a per-lane average from 899 lanes.</td><td class="num">+200 to +400</td></tr>
+    <tr><td>Realized-cost trees<br><span class="mono small muted">costW</span></td><td>The planner's expected fee barely predicted what an order ended up costing (R² 0.06). Raises, drops, failed visits and refunds were invisible when pricing.</td><td>Trees predict the full final cost from what is known at quote time (R² 0.27). Cheap gigs turn out dearer per euro than the plan says.</td><td class="num">+644 ± 106</td></tr>
+    <tr><td>Hard options<br><span class="mono small muted">minBookChance, hardChance, hardPrice</span></td><td>Some deadline options are unlikely to find a driver in time. Refusing them all loses sales, selling them all breaks the 90% on-time line.</td><td>Three bands: refuse under 0.82, sell 20% dearer up to 0.95, normal above.</td><td class="num">not measured alone</td></tr>
+    <tr class="grp"><td colspan="4">Rationing drivers</td></tr>
+    <tr><td>Capacity cost and a lower floor<br><span class="mono small muted">capLam, capConst, markupMin</span></td><td>With a high price floor, 43% of quotes sat on it, so the floor was choosing our orders. Drivers, not demand, are the limit: about 200 carry everything.</td><td>A low floor of 1.28, and a charge of 4 EUR per driver-hour on each quote, so long drives must earn more to be worth a driver.</td><td class="num">+600 to +800</td></tr>
+    <tr><td>Full town or deadline day<br><span class="mono small muted">capPerDriver, dueCapPer, fullPrice</span></td><td>Orders piled up in one town or on one deadline day and went late together. Friday-due orders held 40% of all lates.</td><td>Past a load limit, prices rise 25% instead of declining. The few orders still won pay for the risk.</td><td class="num">keeps weeks ranked; day cap +190</td></tr>
+    <tr><td>Price by deadline day<br><span class="mono small muted">dueMon, dueFri</span></td><td>Friday is the tight day, and Monday deadlines have slack because no new requests arrive over the weekend.</td><td>Friday-due +8% of list, next-Monday-due −3%.</td><td class="num">+120 ± 63</td></tr>
+    <tr class="grp"><td colspan="4">Reading the competitor</td></tr>
+    <tr><td>Weekday price learning<br><span class="mono small muted">pS, pWeek, pDay</span></td><td>The competitor sits 26% to 54% above list, different every week, and swings 12% between weekdays. One fixed price curve is wrong most days.</td><td>A filter learns a week level and a level per weekday from every win and loss. The weekday prior has to be wide (SD 0.14 in log price) or the filter learns nothing.</td><td class="num">+419 ± 101</td></tr>
+    <tr><td>Lane level<br><span class="mono small muted">pLane</span></td><td>Inside a week the competitor is consistently dear or cheap on a given lane, and 64% of requests come on a lane already asked that week.</td><td>One more learned level per lane.</td><td class="num">+303 ± 83 (one of four sets negative)</td></tr>
+    <tr><td>Price floor follows the learned level<br><span class="mono small muted">floorLvl</span></td><td>In a cheap week or on a price-war day the fixed floor priced us out for whole days.</td><td>The floor drops with the learned level, by at most 0.20.</td><td class="num">+222 ± 58</td></tr>
+    <tr><td>Outage belief<br><span class="mono small muted">outBayes, outageK, outage</span></td><td>In a live test final the competitor went down around Helsinki. Priced at the floor, we won 79% of 108 requests, far too cheap, and a simple yes/no flag also fired outside the region.</td><td>A probability per region, with the win chance mixed between competitor and backup. The backup factor is 1.2 because stored quotes show wins hold up to 1.2 × and collapse by 1.3 ×.</td><td class="num">+430 ± 144</td></tr>
+    <tr class="grp"><td colspan="4">Paying drivers</td></tr>
+    <tr><td>Planned fee schedule<br><span class="mono small muted">openMin, openMax, raiseMax, steps, lateCost</span></td><td>Flat fees lost at every level tried: cheap ones miss drivers, dear ones overpay. Only 38% of gigs book at the opening fee.</td><td>Opens low and raises hourly, with the pair (open, raise) chosen per gig by expected cost.</td><td class="num">opening floor and late fee: +530 ± 116</td></tr>
+    <tr><td>Early ramp<br><span class="mono small muted">rampTop, rampWindowH</span></td><td>A gig still unbooked the evening before its pickup day is 12.6% late, a booked one 2.3%. Raising at the last minute is too late.</td><td>Climbs to 1.45 × over the last 10 hours, ending 3 hours before the last pickup. It stops at 1.45 because the booking model shows no gain past 1.4.</td><td class="num">not measured alone</td></tr>
+    <tr><td>Late fee<br><span class="mono small muted">lateFee</span></td><td>Once the last pickup time has passed the order is late whatever we pay, yet the fee kept climbing.</td><td>Drops back to 0.83 × and climbs slowly.</td><td class="num">part of the +530</td></tr>
+    <tr><td>Cheaper fees from Thursday<br><span class="mono small muted">feeLate</span></td><td>In a test final, gigs posted on Thursday and Friday booked at 0.99 × typical against 0.87 on Monday: we overpaid late in the week.</td><td>Planned fees × 0.95 from Thursday on.</td><td class="num">+168 ± 45</td></tr>
+    <tr><td>Booking shift<br><span class="mono small muted">bookShift, bookQuote</span></td><td>The booking model is slightly too pessimistic about how fast drivers book. Correcting it everywhere sold more orders and cost ranked weeks.</td><td>Corrects it in the fee schedules only, so fees open lower while sales stay the same.</td><td class="num">+320 ± 50</td></tr>
+    <tr class="grp"><td colspan="4">Details that prevent failures</td></tr>
+    <tr><td>Note reading<br><span class="mono small muted">noteHours, pairFlags, hoursMinLeftH</span></td><td>Orders whose note gave real opening hours were 14 to 19% late, with 27 visits to closed sites per 100.</td><td>Reads hours, ready times, plates and gearbox from the note and plans around them.</td><td class="num">+251 ± 94; failed visits 3.5 → 0.6 a week</td></tr>
+    <tr><td>Two-car gigs<br><span class="mono small muted">pairKm, pairSlackH, pairCap, pairTop, pairHoldH</span></td><td>Every single-car gig pays a driver's empty trips. But a third of the pairs that nobody booked went late.</td><td>Joins cars into a chain when the join is short and there is slack, and splits the pair after 3 hours unbooked.</td><td class="num">the 40 km and 3 h settings: +213 ± 70</td></tr>
+  </table></div>
 </section>
 
 <section id="params">
@@ -580,9 +571,9 @@ table.why td.num{min-width:110px}
 <section id="limits">
   <h2>Known limits</h2>
   <ul>
-    <li><strong>On time has little room to spare.</strong> 6 of 96 test weeks were under 92% on time and the worst was 89.2%, just under the 90% line, so about one week in 96 is unranked.</li>
-    <li><strong>The config sits on a plateau.</strong> A screen of 14 more parameter changes around these values (pairKm 50, pairHoldH 2, minProfit 0.15, costUp 0.3 and others) found no edge.</li>
-    <li><strong>A dear tail late in the week.</strong> On Thursday and Friday, 26 to 35% of our deliveries cost over 80% of their price. Driver scarcity is priced with one flat rate, not one that tightens as the week fills up.</li>
+    <li><strong>Small on-time margin.</strong> 6 of 96 test weeks were under 92% on time and the worst was 89.2%, just under the 90% line, so about one week in 96 is unranked.</li>
+    <li><strong>No further gain from parameter tuning.</strong> A screen of 14 more parameter changes around these values (pairKm 50, pairHoldH 2, minProfit 0.15, costUp 0.3 and others) found no edge.</li>
+    <li><strong>High-cost deliveries late in the week.</strong> On Thursday and Friday, 26 to 35% of our deliveries cost over 80% of their price. Driver scarcity is priced with one flat rate, not one that tightens as the week fills up.</li>
     <li><strong>No reaction to the flu day.</strong> It shows as 6 or more drops between 00:00 and 01:00 and roughly doubles the late share of orders due that day. The model does not use the signal.</li>
   </ul>
   <p class="small muted">Sources: <span class="mono">Bahn-Spread/kit-final/algo.ts</span>, <span class="mono">core/model.ts</span>, <span class="mono">core/cost.ts</span>, <span class="mono">core/engine.ts</span>, <span class="mono">core/data/*.json</span>, <span class="mono">research/KNOWLEDGE.md</span>, <span class="mono">research/LEDGER.md</span>.</p>
